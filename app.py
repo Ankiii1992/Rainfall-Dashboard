@@ -39,35 +39,31 @@ lang = st.sidebar.radio("🌐 Language", options=["en", "gu"], format_func=lambd
 # ----------- Data Loading and Processing -----------
 sheet_url = "https://docs.google.com/spreadsheets/d/1G-RpFQq1ZEhfeCQi9Z6YeZDABQLVvcbt2qQg_zdbUmU/export?format=csv"
 df_raw = pd.read_csv(sheet_url)
-
-# Strip leading/trailing spaces from column names to avoid melt errors
 df_raw.columns = df_raw.columns.str.strip()
 
-# Show column names for debugging
+# Debug column names
 st.sidebar.write("🧾 Columns found in sheet:", df_raw.columns.tolist())
 
-# Define time slot columns
+# Define 2-hour time slot columns
 time_slots = ["06–08", "08–10", "10–12", "12–14", "14–16", "16–18", "18–20", "20–22"]
 
-# Melt wide-format to long-format
+# Melt wide to long (avoid conflict with existing "Rain_mm" or "Total_mm")
 df = df_raw.melt(
     id_vars=["District", "Taluka"],
-    value_vars=[col for col in time_slots if col in df_raw.columns],  # safety check
+    value_vars=[col for col in time_slots if col in df_raw.columns],
     var_name="Time Slot",
-    value_name="Rain_mm"
+    value_name="Rain_2hr_mm"
 )
 
-# Add today's date for filtering
 df["Date"] = pd.to_datetime(datetime.now().date())
-df["Rain_mm"] = pd.to_numeric(df["Rain_mm"], errors="coerce")
-df.dropna(subset=["Rain_mm"], inplace=True)
+df["Rain_2hr_mm"] = pd.to_numeric(df["Rain_2hr_mm"], errors="coerce")
+df.dropna(subset=["Rain_2hr_mm"], inplace=True)
 df["Time Slot Label"] = df["Time Slot"].apply(format_timeslot)
 
 # ----------- UI Controls -----------
 st.title(label("title"))
 selected_date = st.sidebar.selectbox(label("select_date"), sorted(df["Date"].dt.date.unique(), reverse=True))
 selected_taluka = st.sidebar.selectbox(label("select_taluka"), sorted(df["Taluka"].unique()))
-
 today_df = df[df["Date"].dt.date == selected_date]
 filtered = today_df[today_df["Taluka"] == selected_taluka]
 
@@ -75,20 +71,18 @@ if filtered.empty:
     st.warning("No data available for this selection.")
     st.stop()
 
-# ----------- Metric Calculations -----------
+# ----------- Metrics -----------
 latest = filtered.iloc[-1]
 latest_slot = format_timeslot(latest["Time Slot"])
-latest_rain = latest["Rain_mm"]
-total_today = filtered["Rain_mm"].sum()
+latest_rain = latest["Rain_2hr_mm"]
+total_today = filtered["Rain_2hr_mm"].sum()
 
-# Top by total
-top_today = today_df.groupby("Taluka")["Rain_mm"].sum().sort_values(ascending=False)
+top_today = today_df.groupby("Taluka")["Rain_2hr_mm"].sum().sort_values(ascending=False)
 top_taluka_today = top_today.index[0]
 top_today_amount = top_today.iloc[0]
 
-# Top by latest slot
 latest_interval = today_df["Time Slot"].max()
-top_last2h = today_df[today_df["Time Slot"] == latest_interval].groupby("Taluka")["Rain_mm"].sum().sort_values(ascending=False)
+top_last2h = today_df[today_df["Time Slot"] == latest_interval].groupby("Taluka")["Rain_2hr_mm"].sum().sort_values(ascending=False)
 top_taluka_2h = top_last2h.index[0]
 top_2h_amount = top_last2h.iloc[0]
 
@@ -117,22 +111,19 @@ with st.container():
 # Trend Chart
 st.markdown("---")
 st.subheader("📈 " + label("chart_title"))
-chart = px.line(filtered, x="Time Slot Label", y="Rain_mm", markers=True,
-                labels={"Time Slot Label": "Time Slot", "Rain_mm": "Rainfall (mm)"},
-                title=None)
+chart = px.line(filtered, x="Time Slot Label", y="Rain_2hr_mm", markers=True,
+                labels={"Time Slot Label": "Time Slot", "Rain_2hr_mm": "Rainfall (mm)"})
 st.plotly_chart(chart, use_container_width=True)
 
 # Taluka Day Table
 st.subheader("📋 " + label("table_title"))
-st.dataframe(filtered[["Time Slot Label", "Rain_mm"]].set_index("Time Slot Label"))
+st.dataframe(filtered[["Time Slot Label", "Rain_2hr_mm"]].set_index("Time Slot Label"))
 
-# Expandable Full Table
+# Expandable Full Table in Original Format (Wide CSV Style)
 st.markdown("---")
 with st.expander("🔽 " + label("show_full_table")):
     st.dataframe(
-        today_df[["Taluka", "Time Slot Label", "Rain_mm"]]
-        .sort_values(by=["Taluka", "Time Slot Label"])
-        .reset_index(drop=True)
+        df_raw.sort_values(by=["District", "Taluka"]).reset_index(drop=True)
     )
 
 # Footer

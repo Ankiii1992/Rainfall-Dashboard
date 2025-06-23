@@ -23,7 +23,7 @@ def push_latest_csv_to_google_sheet():
         df = pd.read_csv(csv_file)
 
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["google_sheets"], scope)
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key("1S2npEHBjBn3e9xPuAnHOWF9NEWuTzEiAJpvEp4Gbnik")
 
@@ -38,6 +38,7 @@ def push_latest_csv_to_google_sheet():
 
     except Exception as e:
         print(f"❌ Error while pushing to Google Sheet: {e}")
+
 
 
 # --- Run Silent Push ---

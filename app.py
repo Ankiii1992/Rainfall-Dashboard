@@ -5,15 +5,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
 
-def format_timeslot(slot):
-    try:
-        start, end = slot.split("–")
-        s = datetime.strptime(start.replace("24", "00").zfill(2), "%H").strftime("%I:%M %p")
-        e = datetime.strptime(end.replace("24", "00").zfill(2), "%H").strftime("%I:%M %p")
-        return f"{s} – {e}"
-    except:
-        return slot
-
+# ----------- Language Toggle -----------
 def label(key):
     return {
         "title": {"en": "🌧️ 2-Hourly Rainfall Dashboard", "gu": "🌧️ ૨ કલાકનું વરસાદ માહિતી ડૅશબોર્ડ"},
@@ -32,19 +24,44 @@ def label(key):
         "show_full_table": {"en": "Show Full Taluka Table", "gu": "બધા તાલુકાનું ટેબલ જુઓ"}
     }.get(key, {}).get(lang, key)
 
+def format_timeslot(slot):
+    try:
+        start, end = slot.split("–")
+        s = datetime.strptime(start.replace("24", "00").zfill(2), "%H").strftime("%I:%M %p")
+        e = datetime.strptime(end.replace("24", "00").zfill(2), "%H").strftime("%I:%M %p")
+        return f"{s} – {e}"
+    except:
+        return slot
+
+# ----------- Language Switcher -----------
 lang = st.sidebar.radio("🌐 Language", options=["en", "gu"], format_func=lambda x: "English" if x == "en" else "ગુજરાતી")
 
+# ----------- Data Loading and Processing -----------
 sheet_url = "https://docs.google.com/spreadsheets/d/1G-RpFQq1ZEhfeCQi9Z6YeZDABQLVvcbt2qQg_zdbUmU/export?format=csv"
-df = pd.read_csv(sheet_url)
+df_raw = pd.read_csv(sheet_url)
 
-df["Date"] = pd.to_datetime(df["Date"])
+# Define time slot columns
+time_slots = ["06–08", "08–10", "10–12", "12–14", "14–16", "16–18", "18–20", "20–22"]
+
+# Melt to long format
+df = df_raw.melt(
+    id_vars=["District", "Taluka"],
+    value_vars=time_slots,
+    var_name="Time Slot",
+    value_name="Rain_mm"
+)
+
+# Add today's date for filtering
+df["Date"] = pd.to_datetime(datetime.now().date())
 df["Rain_mm"] = pd.to_numeric(df["Rain_mm"], errors="coerce")
 df.dropna(subset=["Rain_mm"], inplace=True)
 df["Time Slot Label"] = df["Time Slot"].apply(format_timeslot)
 
+# ----------- UI Controls -----------
 st.title(label("title"))
 selected_date = st.sidebar.selectbox(label("select_date"), sorted(df["Date"].dt.date.unique(), reverse=True))
 selected_taluka = st.sidebar.selectbox(label("select_taluka"), sorted(df["Taluka"].unique()))
+
 today_df = df[df["Date"].dt.date == selected_date]
 filtered = today_df[today_df["Taluka"] == selected_taluka]
 
@@ -52,19 +69,24 @@ if filtered.empty:
     st.warning("No data available for this selection.")
     st.stop()
 
+# ----------- Metric Calculations -----------
 latest = filtered.iloc[-1]
 latest_slot = format_timeslot(latest["Time Slot"])
 latest_rain = latest["Rain_mm"]
 total_today = filtered["Rain_mm"].sum()
 
+# Top by total
 top_today = today_df.groupby("Taluka")["Rain_mm"].sum().sort_values(ascending=False)
 top_taluka_today = top_today.index[0]
 top_today_amount = top_today.iloc[0]
 
+# Top by latest slot
 latest_interval = today_df["Time Slot"].max()
 top_last2h = today_df[today_df["Time Slot"] == latest_interval].groupby("Taluka")["Rain_mm"].sum().sort_values(ascending=False)
 top_taluka_2h = top_last2h.index[0]
 top_2h_amount = top_last2h.iloc[0]
+
+# ----------- Display Sections -----------
 
 # Selected Taluka Overview
 st.markdown("### 📍 " + label("selected_taluka"))
@@ -90,10 +112,11 @@ with st.container():
 st.markdown("---")
 st.subheader("📈 " + label("chart_title"))
 chart = px.line(filtered, x="Time Slot Label", y="Rain_mm", markers=True,
-                labels={"Time Slot Label": "Time Slot", "Rain_mm": "Rainfall (mm)"})
+                labels={"Time Slot Label": "Time Slot", "Rain_mm": "Rainfall (mm)"},
+                title=None)
 st.plotly_chart(chart, use_container_width=True)
 
-# Day Table
+# Taluka Day Table
 st.subheader("📋 " + label("table_title"))
 st.dataframe(filtered[["Time Slot Label", "Rain_mm"]].set_index("Time Slot Label"))
 
@@ -109,4 +132,3 @@ with st.expander("🔽 " + label("show_full_table")):
 # Footer
 st.markdown("---")
 st.caption("📊 " + label("footer"))
-

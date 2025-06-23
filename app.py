@@ -12,16 +12,16 @@ def push_latest_csv_to_google_sheet():
     try:
         csv_files = sorted(glob.glob("Rainfall_20*.csv"))
         if not csv_files:
-            return  # No CSV to process
+            print("⚠️ No CSV files found.")
+            return
 
-        csv_file = csv_files[-1]  # Pick most recent
+        csv_file = csv_files[-1]
         date_str = os.path.splitext(csv_file)[0].split("_")[1]
         date_obj = datetime.strptime(date_str, "%Y-%m-%d")
         tab_name = date_obj.strftime("%d %B")
 
         df = pd.read_csv(csv_file)
 
-        # Google Sheet auth
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         client = gspread.authorize(creds)
@@ -34,9 +34,11 @@ def push_latest_csv_to_google_sheet():
 
         worksheet.clear()
         worksheet.update([df.columns.tolist()] + df.values.tolist())
+        print(f"✅ Pushed '{csv_file}' to Google Sheet tab '{tab_name}'")
 
     except Exception as e:
-        pass  # Fail silently for now
+        print(f"❌ Error while pushing to Google Sheet: {e}")
+
 
 # --- Run Silent Push ---
 push_latest_csv_to_google_sheet()

@@ -40,13 +40,19 @@ lang = st.sidebar.radio("🌐 Language", options=["en", "gu"], format_func=lambd
 sheet_url = "https://docs.google.com/spreadsheets/d/1G-RpFQq1ZEhfeCQi9Z6YeZDABQLVvcbt2qQg_zdbUmU/export?format=csv"
 df_raw = pd.read_csv(sheet_url)
 
+# Strip leading/trailing spaces from column names to avoid melt errors
+df_raw.columns = df_raw.columns.str.strip()
+
+# Show column names for debugging
+st.sidebar.write("🧾 Columns found in sheet:", df_raw.columns.tolist())
+
 # Define time slot columns
 time_slots = ["06–08", "08–10", "10–12", "12–14", "14–16", "16–18", "18–20", "20–22"]
 
-# Melt to long format
+# Melt wide-format to long-format
 df = df_raw.melt(
     id_vars=["District", "Taluka"],
-    value_vars=time_slots,
+    value_vars=[col for col in time_slots if col in df_raw.columns],  # safety check
     var_name="Time Slot",
     value_name="Rain_mm"
 )

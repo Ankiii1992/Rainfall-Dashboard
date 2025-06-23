@@ -37,7 +37,7 @@ def format_timeslot(slot):
 lang = st.sidebar.radio("🌐 Language", options=["en", "gu"], format_func=lambda x: "English" if x == "en" else "ગુજરાતી")
 
 # ----------- Data Loading and Processing -----------
-sheet_url = "https://docs.google.com/spreadsheets/d/1G-RpFQq1ZEhfeCQi9Z6YeZDABQLVvcbt2qQg_zdbUmU/export?format=csv"
+sheet_url = "https://docs.google.com/spreadsheets/d/1S2npEHBjBn3e9xPuAnHOWF9NEWuTzEiAJpvEp4Gbnik/edit?gid=1849046072#gid=1849046072"
 df_raw = pd.read_csv(sheet_url)
 
 # Define time slot columns

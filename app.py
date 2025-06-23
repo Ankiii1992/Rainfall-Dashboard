@@ -45,7 +45,7 @@ df_raw.columns = df_raw.columns.str.strip()
 #st.sidebar.write("🧾 Columns found in sheet:", df_raw.columns.tolist())
 
 # Define 2-hour time slot columns
-  time_slots = ["06–08", "08–10", "10–12", "12–14", "14–16", "16–18", "18–20", "20–22"]
+time_slots = ["06–08", "08–10", "10–12", "12–14", "14–16", "16–18", "18–20", "20–22"]
 
 # Melt wide to long (avoid conflict with existing "Rain_mm" or "Total_mm")
 df = df_raw.melt(

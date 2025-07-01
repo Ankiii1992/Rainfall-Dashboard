@@ -59,8 +59,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 @st.cache_data
-def load_data():
-    sheet_url = "https://docs.google.com/spreadsheets/d/1S2npEHBjBn3e9xPuAnHOWF9NEWuTzEiAJpvEp4Gbnik/export?format=csv&gid=1043553049"
+
+def list_available_dates():
+    meta_url = "https://docs.google.com/spreadsheets/d/1S2npEHBjBn3e9xPuAnHOWF9NEWuTzEiAJpvEp4Gbnik/gviz/tq?tqx=out:csv"
+    meta_df = pd.read_csv(meta_url)
+    sheet_names = meta_df.columns[1:].tolist()
+    return sheet_names
+
+def load_data(date_sheet):
+    base_url = "https://docs.google.com/spreadsheets/d/1S2npEHBjBn3e9xPuAnHOWF9NEWuTzEiAJpvEp4Gbnik/export?format=csv&gid="
+    sheet_gid_map = {
+        "2025-06-23": "1043553049"
+        # Add more dates and their gid mappings as needed
+    }
+    sheet_gid = sheet_gid_map.get(date_sheet)
+    if not sheet_gid:
+        st.error(f"GID not mapped for date sheet: {date_sheet}")
+        st.stop()
+    sheet_url = f"{base_url}{sheet_gid}"
     df = pd.read_csv(sheet_url)
     df.columns = df.columns.str.strip()
     df_long = df.melt(
@@ -73,12 +89,15 @@ def load_data():
     df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
     return df, df_long
 
-df, df_long = load_data()
+# --- Load Available Dates ---
+available_dates = list_available_dates()
+selected_date = st.selectbox("📅 Select Date", available_dates, index=0)
 
-# --- Date Selector ---
-today = datetime.today().date()
+# --- Dashboard Title ---
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
-selected_date = st.selectbox("📅 Select Date", [today])
+
+# --- Load Selected Date Sheet ---
+df, df_long = load_data(selected_date)
 
 # --- Metric Values ---
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]

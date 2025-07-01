@@ -17,14 +17,14 @@ st.markdown("""
         font-size: 2.8rem;
         font-weight: 800;
         color: #1a237e;
-        padding: 1rem 0;
+        padding: 1rem 0 0.2rem 0;
     }
     .metric-container {
         padding: 0.8rem;
     }
     .metric-tile {
         background: linear-gradient(135deg, #f0faff, #e0f2f1);
-        padding: 1.4rem 1.8rem 1.2rem 1.8rem;
+        padding: 1.2rem 1.4rem 1rem 1.4rem;
         border-radius: 1.25rem;
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
         text-align: center;
@@ -41,18 +41,18 @@ st.markdown("""
     }
     .metric-tile h4 {
         color: #01579b;
-        font-size: 1.1rem;
-        margin-bottom: 0.3rem;
+        font-size: 1.05rem;
+        margin-bottom: 0.2rem;
     }
     .metric-tile h2 {
         font-size: 2.2rem;
         color: #0077b6;
-        margin: 0.1rem 0;
+        margin: 0.1rem 0 0.1rem 0;
         font-weight: 700;
     }
     .metric-tile p {
-        margin: 0.2rem 0 0;
-        font-size: 1rem;
+        margin: 0 0 0;
+        font-size: 0.95rem;
         color: #37474f;
     }
 </style>
@@ -75,7 +75,10 @@ def load_data():
 
 df, df_long = load_data()
 
-st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard – 23 June 2025</div>", unsafe_allow_html=True)
+# --- Date Selector ---
+today = datetime.today().date()
+st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+selected_date = st.selectbox("📅 Select Date", [today])
 
 # --- Metric Values ---
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]

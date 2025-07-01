@@ -60,7 +60,9 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv("Rainfall_2025-06-23.csv")
+    sheet_url = "https://docs.google.com/spreadsheets/d/1S2npEHBjBn3e9xPuAnHOWF9NEWuTzEiAJpvEp4Gbnik/export?format=csv&gid=1043553049"
+    df = pd.read_csv(sheet_url)
+    df.columns = df.columns.str.strip()
     df_long = df.melt(
         id_vars=["District", "Taluka", "Total_mm"],
         value_vars=[col for col in df.columns if "–" in col],
@@ -129,4 +131,3 @@ if selected_talukas:
 # --- Table Section ---
 st.markdown("### 📋 Full Rainfall Data Table")
 st.dataframe(df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True))
-

@@ -79,7 +79,13 @@ def load_all_sheet_tabs():
         df = pd.DataFrame(data[1:], columns=data[0])
         df.replace("", pd.NA, inplace=True)
         df = df.dropna(how="all")
-        df["TOTAL"] = pd.to_numeric(df["TOTAL"], errors="coerce")
+        df.columns = df.columns.str.strip()
+
+        # ✅ Rename 'TOTAL' to 'Total_mm'
+        if "TOTAL" in df.columns:
+            df.rename(columns={"TOTAL": "Total_mm"}, inplace=True)
+
+        df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
         for col in df.columns:
             if "–" in col:
                 df[col] = pd.to_numeric(df[col], errors="coerce")

@@ -104,7 +104,7 @@ def load_all_sheet_tabs():
 data_by_date = load_all_sheet_tabs()
 available_dates = sorted(data_by_date.keys(), reverse=True)
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
-selected_tab = st.selectbox("📅 Select Date", available_dates)
+selected_tab = st.selectbox("📅 Select Date", available_dates, index=0)
 
 df = data_by_date[selected_tab]
 df.columns = df.columns.str.strip()
@@ -117,6 +117,9 @@ df_long = df.melt(
 )
 df_long = df_long.dropna(subset=["Rainfall (mm)"])
 df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
+
+# Format Time Slot for display (e.g., 06TO08 -> 6-8)
+df_long["Time Slot"] = df_long["Time Slot"].apply(lambda x: f"{int(x[:2])}-{int(x[-2:])}" if "TO" in x else x)
 
 # --- Metric Values ---
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
@@ -164,8 +167,8 @@ if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
     fig = px.line(plot_df, x="Time Slot", y="Rainfall (mm)", color="Taluka", markers=True,
                  title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 # --- Table Section ---
 st.markdown("### 📋 Full Rainfall Data Table")
-st.dataframe(df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True))
+st.dataframe(df.sort_values(by="Total_mm", ascending=False), hide_index=True)

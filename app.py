@@ -82,20 +82,20 @@ df = df.dropna(how="all")
 df.columns = df.columns.str.strip()
 
 # ✅ Rename 'TOTAL' to 'Total_mm' or fallback if missing
-if "Total_mm" not in df.columns:
-    if "TOTAL" in df.columns:
-        df.rename(columns={"TOTAL": "Total_mm"}, inplace=True)
-    else:
-        df["Total_mm"] = 0  # fallback if TOTAL not found
-
-df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
-
-for col in df.columns:
-    if "–" in col:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-data_by_date[tab_name] = df
-    return data_by_date
+    if "Total_mm" not in df.columns:
+        if "TOTAL" in df.columns:
+            df.rename(columns={"TOTAL": "Total_mm"}, inplace=True)
+        else:
+            df["Total_mm"] = 0  # fallback if TOTAL not found
+    
+    df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
+    
+    for col in df.columns:
+        if "–" in col:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    
+    data_by_date[tab_name] = df
+return data_by_date
 
 # --- Load data ---
 data_by_date = load_all_sheet_tabs()

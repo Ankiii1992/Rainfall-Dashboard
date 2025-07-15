@@ -95,7 +95,12 @@ def load_all_sheet_tabs():
 
 # --- Load data ---
 data_by_date = load_all_sheet_tabs()
-available_dates = sorted(data_by_date.keys(), reverse=True)
+from datetime import datetime
+available_dates = sorted(
+    data_by_date.keys(),
+    key=lambda d: datetime.strptime(d, "%d-%m-%Y"),
+    reverse=True
+)
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("📅 Select Date", available_dates, index=0)

@@ -123,15 +123,6 @@ more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
 more_than_50 = df[df['Total_mm'] > 50].shape[0]
 
-# --- Format Time Slot ---
-def format_time_slot(slot):
-    if "TO" in slot:
-        start, end = slot[:2], slot[-2:]
-        return f"{int(start)}-{int(end)}"
-    return slot
-
-df_long["Display Slot"] = df_long["Time Slot"].apply(format_time_slot)
-
 # --- Metric Tiles ---
 st.markdown("### Overview")
 row1 = st.columns(3)
@@ -161,16 +152,18 @@ for col, (label, value) in zip(row2, row2_titles):
         st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Chart ---
+# --- Chart Section ---
 st.markdown("### 📈 Rainfall Trend by Time Slot")
 selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
-    fig = px.line(plot_df, x="Display Slot", y="Rainfall (mm)", color="Taluka", markers=True,
-                  title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    fig = px.line(plot_df, x="Time Slot", y="Rainfall (mm)", color="Taluka", markers=True,
+                 title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
+    st.plotly_chart(fig, use_container_width=True)
 
-# --- Table ---
+# --- Table Section ---
 st.markdown("### 📋 Full Rainfall Data Table")
-st.table(df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True))
+df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
+df_display.index += 1
+st.dataframe(df_display, use_container_width=True, height=600)

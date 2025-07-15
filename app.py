@@ -63,8 +63,9 @@ st.markdown("""
 # --- Load Google Sheet Tabs ---
 @st.cache_data
 def load_all_sheet_tabs():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds_dict = st.secrets["gcp_service_account"]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
     spreadsheet = client.open("Rainfall Dashboard")
     sheet_tabs = spreadsheet.worksheets()

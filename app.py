@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
@@ -64,7 +64,7 @@ st.markdown("""
 @st.cache_data
 def load_all_sheet_tabs():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    creds_dict = st.secrets["gcp_service_account"]
+    creds_dict = dict(st.secrets["gcp_service_account"])  # ✅ Fix: Convert to true dict
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
     spreadsheet = client.open("Rainfall Dashboard")
@@ -89,9 +89,6 @@ def load_all_sheet_tabs():
 # --- Load data ---
 data_by_date = load_all_sheet_tabs()
 available_dates = sorted(data_by_date.keys(), reverse=True)
-selected_tab = st.selectbox("📅 Select Date", available_dates, index=0)
-
-# --- UI ---
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 selected_tab = st.selectbox("📅 Select Date", available_dates)
 

@@ -110,19 +110,27 @@ df.columns = df.columns.str.strip()
 
 time_slot_columns = [col for col in df.columns if "TO" in col]
 
+# Sort time slot columns based on custom order
+time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
+                   '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
+existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
+
+
 df_long = df.melt(
     id_vars=["District", "Taluka", "Total_mm"],
-    value_vars=time_slot_columns,
+    value_vars=existing_order,
     var_name="Time Slot",
     value_name="Rainfall (mm)"
 )
 df_long = df_long.dropna(subset=["Rainfall (mm)"])
+df_long['Time Slot'] = pd.Categorical(df_long['Time Slot'], categories=existing_order, ordered=True)
 df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
 
 # --- Metrics ---
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
-df_latest = df_long[df_long['Time Slot'] == df_long['Time Slot'].max()]
-top_latest = df_latest.sort_values(by='Rainfall (mm)', ascending=False).iloc[0]
+df_latest_slot = df_long.loc[df_long.groupby('Taluka')['Time Slot'].idxmax()]
+top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0]
+
 num_talukas_with_rain = df[df['Total_mm'] > 0].shape[0]
 more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]

@@ -2,11 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import time
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
+# --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
 
-# --- Enhanced CSS with fixed tile height and spacing ---
+# --- Enhanced CSS ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -58,27 +60,50 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- Load Google Sheet Tabs ---
 @st.cache_data
-def load_data():
-    sheet_url = "https://docs.google.com/spreadsheets/d/1S2npEHBjBn3e9xPuAnHOWF9NEWuTzEiAJpvEp4Gbnik/export?format=csv&gid=1043553049"
-    df = pd.read_csv(sheet_url)
-    df.columns = df.columns.str.strip()
-    df_long = df.melt(
-        id_vars=["District", "Taluka", "Total_mm"],
-        value_vars=[col for col in df.columns if "–" in col],
-        var_name="Time Slot",
-        value_name="Rainfall (mm)"
-    )
-    df_long = df_long.dropna(subset=["Rainfall (mm)"])
-    df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
-    return df, df_long
+def load_all_sheet_tabs():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open("Rainfall Dashboard")
+    sheet_tabs = spreadsheet.worksheets()
 
-df, df_long = load_data()
+    data_by_date = {}
+    for tab in sheet_tabs:
+        tab_name = tab.title
+        data = tab.get_all_values()
+        if not data or len(data) < 2:
+            continue
+        df = pd.DataFrame(data[1:], columns=data[0])
+        df.replace("", pd.NA, inplace=True)
+        df = df.dropna(how="all")
+        df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
+        for col in df.columns:
+            if "–" in col:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        data_by_date[tab_name] = df
+    return data_by_date
 
-# --- Date Selector ---
-today = datetime.today().date()
+# --- Load data ---
+data_by_date = load_all_sheet_tabs()
+available_dates = sorted(data_by_date.keys(), reverse=True)
+selected_tab = st.selectbox("📅 Select Date", available_dates, index=0)
+
+# --- UI ---
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
-selected_date = st.selectbox("📅 Select Date", [today])
+selected_tab = st.selectbox("📅 Select Date", available_dates)
+
+df = data_by_date[selected_tab]
+df.columns = df.columns.str.strip()
+df_long = df.melt(
+    id_vars=["District", "Taluka", "Total_mm"],
+    value_vars=[col for col in df.columns if "–" in col],
+    var_name="Time Slot",
+    value_name="Rainfall (mm)"
+)
+df_long = df_long.dropna(subset=["Rainfall (mm)"])
+df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
 
 # --- Metric Values ---
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
@@ -109,10 +134,7 @@ row2_titles = [
 for col, (label, value) in zip(row1, row1_titles):
     with col:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        if isinstance(value, int):
-            st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 for col, (label, value) in zip(row2, row2_titles):

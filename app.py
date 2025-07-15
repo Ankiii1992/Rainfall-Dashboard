@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -60,7 +59,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Load Google Sheet Tabs ---
 @st.cache_data
 def load_all_sheet_tabs():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -105,16 +103,18 @@ selected_tab = st.selectbox("📅 Select Date", available_dates, index=0)
 df = data_by_date[selected_tab]
 df.columns = df.columns.str.strip()
 
+time_slot_columns = [col for col in df.columns if "TO" in col]
+
 df_long = df.melt(
     id_vars=["District", "Taluka", "Total_mm"],
-    value_vars=[col for col in df.columns if "TO" in col],
+    value_vars=time_slot_columns,
     var_name="Time Slot",
     value_name="Rainfall (mm)"
 )
 df_long = df_long.dropna(subset=["Rainfall (mm)"])
 df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
 
-# --- Metric Values ---
+# --- Metrics ---
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
 df_latest = df_long[df_long['Time Slot'] == df_long['Time Slot'].max()]
 top_latest = df_latest.sort_values(by='Rainfall (mm)', ascending=False).iloc[0]
@@ -123,8 +123,14 @@ more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
 more_than_50 = df[df['Total_mm'] > 50].shape[0]
 
-# ✅ Format Time Slot for display AFTER metrics
-df_long["Time Slot"] = df_long["Time Slot"].apply(lambda x: f"{int(x[:2])}-{int(x[-2:])}" if "TO" in x else x)
+# --- Format Time Slot ---
+def format_time_slot(slot):
+    if "TO" in slot:
+        start, end = slot[:2], slot[-2:]
+        return f"{int(start)}-{int(end)}"
+    return slot
+
+df_long["Display Slot"] = df_long["Time Slot"].apply(format_time_slot)
 
 # --- Metric Tiles ---
 st.markdown("### Overview")
@@ -155,16 +161,16 @@ for col, (label, value) in zip(row2, row2_titles):
         st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Chart Section ---
+# --- Chart ---
 st.markdown("### 📈 Rainfall Trend by Time Slot")
 selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
-    fig = px.line(plot_df, x="Time Slot", y="Rainfall (mm)", color="Taluka", markers=True,
+    fig = px.line(plot_df, x="Display Slot", y="Rainfall (mm)", color="Taluka", markers=True,
                   title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-# --- Table Section ---
+# --- Table ---
 st.markdown("### 📋 Full Rainfall Data Table")
-st.table(df.sort_values(by="Total_mm", ascending=False))
+st.table(df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True))

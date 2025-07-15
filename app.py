@@ -64,7 +64,7 @@ st.markdown("""
 @st.cache_data
 def load_all_sheet_tabs():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    creds_dict = dict(st.secrets["gcp_service_account"])  # ✅ Fix: Convert to true dict
+    creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
     spreadsheet = client.open("Rainfall Dashboard")
@@ -76,26 +76,27 @@ def load_all_sheet_tabs():
         data = tab.get_all_values()
         if not data or len(data) < 2:
             continue
-df = pd.DataFrame(data[1:], columns=data[0])
-df.replace("", pd.NA, inplace=True)
-df = df.dropna(how="all")
-df.columns = df.columns.str.strip()
 
-# ✅ Rename 'TOTAL' to 'Total_mm' or fallback if missing
-    if "Total_mm" not in df.columns:
-        if "TOTAL" in df.columns:
-            df.rename(columns={"TOTAL": "Total_mm"}, inplace=True)
-        else:
-            df["Total_mm"] = 0  # fallback if TOTAL not found
-    
-    df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
-    
-    for col in df.columns:
-        if "–" in col:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    
-    data_by_date[tab_name] = df
-return data_by_date
+        df = pd.DataFrame(data[1:], columns=data[0])
+        df.replace("", pd.NA, inplace=True)
+        df = df.dropna(how="all")
+        df.columns = df.columns.str.strip()
+
+        if "Total_mm" not in df.columns:
+            if "TOTAL" in df.columns:
+                df.rename(columns={"TOTAL": "Total_mm"}, inplace=True)
+            else:
+                df["Total_mm"] = 0  # fallback if neither TOTAL nor Total_mm exists
+
+        df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
+
+        for col in df.columns:
+            if "–" in col:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        data_by_date[tab_name] = df
+
+    return data_by_date
 
 # --- Load data ---
 data_by_date = load_all_sheet_tabs()
@@ -159,7 +160,7 @@ selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].u
 if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
     fig = px.line(plot_df, x="Time Slot", y="Rainfall (mm)", color="Taluka", markers=True,
-                 title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
+                  title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Table Section ---

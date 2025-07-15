@@ -82,12 +82,7 @@ def load_all_sheet_tabs():
         df = df.dropna(how="all")
         df.columns = df.columns.str.strip()
 
-        # Rename columns to standardized format
-        df.rename(columns={
-            "DISTRICT": "District",
-            "TALUKA": "Taluka",
-            "TOTAL": "Total_mm"
-        }, inplace=True)
+        df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
 
         if "Total_mm" in df.columns:
             df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
@@ -104,6 +99,7 @@ def load_all_sheet_tabs():
 data_by_date = load_all_sheet_tabs()
 available_dates = sorted(data_by_date.keys(), reverse=True)
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+
 selected_tab = st.selectbox("📅 Select Date", available_dates, index=0)
 
 df = data_by_date[selected_tab]
@@ -118,9 +114,6 @@ df_long = df.melt(
 df_long = df_long.dropna(subset=["Rainfall (mm)"])
 df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
 
-# Format Time Slot for display (e.g., 06TO08 -> 6-8)
-df_long["Time Slot"] = df_long["Time Slot"].apply(lambda x: f"{int(x[:2])}-{int(x[-2:])}" if "TO" in x else x)
-
 # --- Metric Values ---
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
 df_latest = df_long[df_long['Time Slot'] == df_long['Time Slot'].max()]
@@ -129,6 +122,9 @@ num_talukas_with_rain = df[df['Total_mm'] > 0].shape[0]
 more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
 more_than_50 = df[df['Total_mm'] > 50].shape[0]
+
+# ✅ Format Time Slot for display AFTER metrics
+df_long["Time Slot"] = df_long["Time Slot"].apply(lambda x: f"{int(x[:2])}-{int(x[-2:])}" if "TO" in x else x)
 
 # --- Metric Tiles ---
 st.markdown("### Overview")
@@ -166,9 +162,9 @@ selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].u
 if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
     fig = px.line(plot_df, x="Time Slot", y="Rainfall (mm)", color="Taluka", markers=True,
-                 title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
+                  title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 # --- Table Section ---
 st.markdown("### 📋 Full Rainfall Data Table")
-st.dataframe(df.sort_values(by="Total_mm", ascending=False), hide_index=True)
+st.table(df.sort_values(by="Total_mm", ascending=False))

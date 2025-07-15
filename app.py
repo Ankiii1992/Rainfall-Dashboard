@@ -82,16 +82,18 @@ def load_all_sheet_tabs():
         df = df.dropna(how="all")
         df.columns = df.columns.str.strip()
 
-        if "Total_mm" not in df.columns:
-            if "TOTAL" in df.columns:
-                df.rename(columns={"TOTAL": "Total_mm"}, inplace=True)
-            else:
-                df["Total_mm"] = 0  # fallback if neither TOTAL nor Total_mm exists
+        # Rename columns to standardized format
+        df.rename(columns={
+            "DISTRICT": "District",
+            "TALUKA": "Taluka",
+            "TOTAL": "Total_mm"
+        }, inplace=True)
 
-        df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
+        if "Total_mm" in df.columns:
+            df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
 
         for col in df.columns:
-            if "–" in col:
+            if "TO" in col:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
         data_by_date[tab_name] = df
@@ -106,9 +108,10 @@ selected_tab = st.selectbox("📅 Select Date", available_dates)
 
 df = data_by_date[selected_tab]
 df.columns = df.columns.str.strip()
+
 df_long = df.melt(
     id_vars=["District", "Taluka", "Total_mm"],
-    value_vars=[col for col in df.columns if "–" in col],
+    value_vars=[col for col in df.columns if "TO" in col],
     var_name="Time Slot",
     value_name="Rainfall (mm)"
 )
@@ -160,7 +163,7 @@ selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].u
 if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
     fig = px.line(plot_df, x="Time Slot", y="Rainfall (mm)", color="Taluka", markers=True,
-                  title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
+                 title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Table Section ---

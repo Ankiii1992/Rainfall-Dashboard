@@ -4,6 +4,7 @@ import plotly.express as px
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import json
 
 # --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
@@ -210,20 +211,18 @@ if selected_talukas:
     fig.update_layout(showlegend=True)
     fig.update_layout(modebar_remove=['toImage'])
     st.plotly_chart(fig, use_container_width=True)
-    # --- Choropleth Map Section ---
-import json
 
+# --- Choropleth Map Section ---
 st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
 
-# Load the dissolved taluka GeoJSON
+# Load GeoJSON
 with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
     taluka_geojson = json.load(f)
 
-# Ensure Taluka names are consistent for joining
+# Prepare rainfall data for map
 df_map = df.copy()
-df_map['Taluka'] = df_map['Taluka'].str.strip().str.lower()
+df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
 
-# Classify rainfall categories
 def classify_rainfall(mm):
     if mm <= 10: return "Very Low"
     elif mm <= 25: return "Low"
@@ -234,21 +233,19 @@ def classify_rainfall(mm):
     elif mm <= 300: return "Extreme"
     else: return "Exceptional"
 
-df_map['Rainfall Category'] = df_map['Total_mm'].apply(classify_rainfall)
+df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
 
-# Define custom color scale
 color_map = {
-    "Very Low": "#cceeff",     # Light Blue
-    "Low": "#66ffcc",          # Mint Green
-    "Moderate": "#33cc33",     # Green
-    "Heavy": "#ffff66",        # Yellow
-    "Very Heavy": "#ff9933",   # Orange
-    "Intense": "#ff3333",      # Red
-    "Extreme": "#ff66cc",      # Pink
-    "Exceptional": "#9900cc"   # Purple
+    "Very Low": "#cceeff",
+    "Low": "#66ffcc",
+    "Moderate": "#33cc33",
+    "Heavy": "#ffff66",
+    "Very Heavy": "#ff9933",
+    "Intense": "#ff3333",
+    "Extreme": "#ff66cc",
+    "Exceptional": "#9900cc"
 }
 
-# Draw the map
 fig = px.choropleth_mapbox(
     df_map,
     geojson=taluka_geojson,
@@ -264,7 +261,6 @@ fig = px.choropleth_mapbox(
     hover_name="Taluka",
     hover_data=["District", "Total_mm"]
 )
-
 fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
 st.plotly_chart(fig, use_container_width=True)
 

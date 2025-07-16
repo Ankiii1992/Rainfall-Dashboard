@@ -113,6 +113,14 @@ df.columns = df.columns.str.strip()
 # --- Time Slot Handling ---
 time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
                    '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
+
+slot_labels = {
+    '06TO08': '6–8 AM', '08TO10': '8–10 AM', '10TO12': '10–12 PM',
+    '12TO14': '12–2 PM', '14TO16': '2–4 PM', '16TO18': '4–6 PM',
+    '18TO20': '6–8 PM', '20TO22': '8–10 PM', '22TO24': '10–12 PM',
+    '24TO02': '12–2 AM', '02TO04': '2–4 AM', '04TO06': '4–6 AM'
+}
+
 time_slot_columns = [col for col in df.columns if col in time_slot_order]
 existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
 
@@ -125,14 +133,19 @@ df_long = df.melt(
 )
 df_long = df_long.dropna(subset=["Rainfall (mm)"])
 df_long['Time Slot'] = pd.Categorical(df_long['Time Slot'], categories=existing_order, ordered=True)
+df_long['Time Slot Label'] = df_long['Time Slot'].map(slot_labels)
 df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
 
-# --- Latest Time Slot Logic ---
+# --- Latest Time Slot & Metric Calculation ---
 latest_slot = df_long['Time Slot'].dropna().max()
+latest_slot_label = slot_labels.get(str(latest_slot), str(latest_slot))
 df_latest_slot = df_long[df_long['Time Slot'] == latest_slot]
 top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0]
 
-# --- Overall Metrics ---
+# --- Show latest available slot info ---
+st.markdown(f"🕒 <span style='font-size:1.1rem;'>Latest available data: <strong>{latest_slot_label}</strong></span>", unsafe_allow_html=True)
+
+# --- Metric Calculations ---
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
 num_talukas_with_rain = df[df['Total_mm'] > 0].shape[0]
 more_than_150 = df[df['Total_mm'] > 150].shape[0]
@@ -147,7 +160,7 @@ row2 = st.columns(3)
 row1_titles = [
     ("Total Talukas with Rainfall", num_talukas_with_rain),
     ("Highest Rainfall Total", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p>"),
-    (f"Highest Rainfall in Last 2 Hours ({latest_slot})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p>")
+    (f"Highest Rainfall in Last Slot ({latest_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p>")
 ]
 
 row2_titles = [
@@ -173,11 +186,17 @@ st.markdown("### 📈 Rainfall Trend by Time Slot")
 selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:
-    plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
-    plot_df = plot_df.sort_values(by=["Taluka", "Time Slot"])
-    fig = px.line(plot_df, x="Time Slot", y="Rainfall (mm)", color="Taluka", markers=True,
-                  title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
-    st.plotly_chart(fig, use_container_width=True)
+    plot_df = df_long[df_long['Taluka'].isin(selected_talukas)].sort_values(by=["Taluka", "Time Slot"])
+    fig = px.line(
+        plot_df,
+        x="Time Slot Label",
+        y="Rainfall (mm)",
+        color="Taluka",
+        markers=True,
+        title="Rainfall Trend Over Time",
+        labels={"Rainfall (mm)": "Rainfall (mm)"}
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "modeBarButtonsToRemove": ["toImage"]})
 
 # --- Table Section ---
 st.markdown("### 📋 Full Rainfall Data Table")

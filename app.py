@@ -90,9 +90,9 @@ available_dates = sorted(
     reverse=True
 )
 
-st.markdown("<div class='title-text'>\ud83c\udf27\ufe0f Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
-selected_tab = st.selectbox("\ud83d\uddd5\ufe0f Select Date", available_dates, index=0)
+selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
 df = data_by_date[selected_tab]
 df.columns = df.columns.str.strip()
 
@@ -149,7 +149,7 @@ more_than_50 = df[df['Total_mm'] > 50].shape[0]
 
 last_slot_label = slot_labels[existing_order[-1]]
 
-st.markdown(f"#### \ud83d\udcca Latest data available for time slot: **{last_slot_label}**")
+st.markdown(f"#### 📊 Latest data available for time slot: **{last_slot_label}**")
 st.markdown("### Overview")
 
 # --- Enhanced Tiles Section ---

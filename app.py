@@ -260,7 +260,7 @@ if os.path.exists("gujarat_taluka_clean.geojson"):
         locations="Taluka",
         color="Rainfall Category",
         color_discrete_map=color_map,
-        mapbox_style="carto-positron",
+        mapbox_style="open-street-map",
         center={"lat": 22.5, "lon": 71.5},
         zoom=6,
         opacity=0.75,

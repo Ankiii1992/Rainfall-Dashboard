@@ -217,12 +217,12 @@ st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
 
 
 # Load GeoJSON\
-with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
+if os.path.exists("gujarat_taluka_clean.geojson"):
+    with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
         taluka_geojson = json.load(f)
     st.success(f"✅ GeoJSON loaded — {len(taluka_geojson['features'])} features found.")
 else:
     st.error("❌ GeoJSON file not found.")
-
 # Prepare rainfall data for map
 df_map = df.copy()
 df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()

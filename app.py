@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import gspread
 from google.oauth2.service_account import Credentials
+from datetime import datetime
 
 # --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
@@ -95,12 +96,13 @@ def load_all_sheet_tabs():
 
 # --- Load data ---
 data_by_date = load_all_sheet_tabs()
-from datetime import datetime
+
 available_dates = sorted(
     data_by_date.keys(),
     key=lambda d: datetime.strptime(d, "%d-%m-%Y"),
     reverse=True
 )
+
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("📅 Select Date", available_dates, index=0)
@@ -108,14 +110,13 @@ selected_tab = st.selectbox("📅 Select Date", available_dates, index=0)
 df = data_by_date[selected_tab]
 df.columns = df.columns.str.strip()
 
-time_slot_columns = [col for col in df.columns if "TO" in col]
-
-# Sort time slot columns based on custom order
+# --- Time Slot Handling ---
 time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
                    '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
+time_slot_columns = [col for col in df.columns if col in time_slot_order]
 existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
 
-
+# --- Melt to Long Format ---
 df_long = df.melt(
     id_vars=["District", "Taluka", "Total_mm"],
     value_vars=existing_order,
@@ -126,11 +127,13 @@ df_long = df_long.dropna(subset=["Rainfall (mm)"])
 df_long['Time Slot'] = pd.Categorical(df_long['Time Slot'], categories=existing_order, ordered=True)
 df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
 
-# --- Metrics ---
-top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
-df_latest_slot = df_long.loc[df_long.groupby('Taluka')['Time Slot'].idxmax()]
+# --- Latest Time Slot Logic ---
+latest_slot = df_long['Time Slot'].dropna().max()
+df_latest_slot = df_long[df_long['Time Slot'] == latest_slot]
 top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0]
 
+# --- Overall Metrics ---
+top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
 num_talukas_with_rain = df[df['Total_mm'] > 0].shape[0]
 more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
@@ -144,7 +147,7 @@ row2 = st.columns(3)
 row1_titles = [
     ("Total Talukas with Rainfall", num_talukas_with_rain),
     ("Highest Rainfall Total", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p>"),
-    ("Highest Rainfall in Last 2 Hours", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p>")
+    (f"Highest Rainfall in Last 2 Hours ({latest_slot})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p>")
 ]
 
 row2_titles = [
@@ -171,8 +174,9 @@ selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].u
 
 if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
+    plot_df = plot_df.sort_values(by=["Taluka", "Time Slot"])
     fig = px.line(plot_df, x="Time Slot", y="Rainfall (mm)", color="Taluka", markers=True,
-                 title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
+                  title="Rainfall Trend Over Time", labels={"Rainfall (mm)": "Rainfall (mm)"})
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Table Section ---

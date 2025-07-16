@@ -163,34 +163,69 @@ more_than_50 = df[df['Total_mm'] > 50].shape[0]
 
 st.markdown(f"#### 📊 Latest data available for time slot: **{slot_labels[existing_order[-1]]}**")
 
-# --- Metric Tiles ---
-st.markdown("### Overview")
+# --- Metric Tiles with UI update only ---
 row1 = st.columns(3)
 row2 = st.columns(3)
 
-row1_titles = [
-    ("Total Talukas with Rainfall", num_talukas_with_rain),
-    ("Highest Rainfall Total", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p>"),
-    ("Highest Rainfall in Last 2 Hours", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p>")
-]
+with row1[0]:
+    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='metric-tile'>
+        <h4>Total Talukas with Rainfall</h4>
+        <h2>{num_talukas_with_rain}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-row2_titles = [
-    ("Talukas > 150 mm", more_than_150),
-    ("Talukas > 100 mm", more_than_100),
-    ("Talukas > 50 mm", more_than_50)
-]
+with row1[1]:
+    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='metric-tile'>
+        <h4>Highest Rainfall Total</h4>
+        <h2>{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p></h2>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-for col, (label, value) in zip(row1, row1_titles):
-    with col:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+with row1[2]:
+    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='metric-tile'>
+        <h4>Highest Rainfall in Last 2 Hours</h4>
+        <h2>{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p></h2>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-for col, (label, value) in zip(row2, row2_titles):
-    with col:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+with row2[0]:
+    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='metric-tile'>
+        <h4>Talukas > 150 mm</h4>
+        <h2>{more_than_150}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with row2[1]:
+    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='metric-tile'>
+        <h4>Talukas > 100 mm</h4>
+        <h2>{more_than_100}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with row2[2]:
+    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='metric-tile'>
+        <h4>Talukas > 50 mm</h4>
+        <h2>{more_than_50}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- Chart Section ---
 st.markdown("### 📈 Rainfall Trend by Time Slot")
@@ -216,20 +251,17 @@ if selected_talukas:
 # --- Choropleth Map Section ---
 st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
 
-# ✅ Confirm GeoJSON file exists and load it
 if os.path.exists("gujarat_taluka_clean.geojson"):
     with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
         taluka_geojson = json.load(f)
     st.success(f"✅ GeoJSON loaded — {len(taluka_geojson['features'])} features found.")
 
-    # Normalize names in both GeoJSON and DataFrame
     for feature in taluka_geojson["features"]:
         feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
 
     df_map = df.copy()
     df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
 
-    # Classify rainfall
     def classify_rainfall(mm):
         if mm <= 10: return "Very Low"
         elif mm <= 25: return "Low"

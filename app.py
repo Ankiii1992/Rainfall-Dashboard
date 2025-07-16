@@ -137,7 +137,7 @@ df_long['Time Slot'] = pd.Categorical(df_long['Time Slot'], categories=existing_
 # 🔧 PATCH: Apply ordered Time Slot Label for x-axis
 df_long['Time Slot Label'] = pd.Categorical(
     df_long['Time Slot'].map(slot_labels),
-    categories=[slot_labels[slot] for slot in existing_order],
+    categories=list(dict.fromkeys([slot_labels[slot] for slot in existing_order])),
     ordered=True
 )
 

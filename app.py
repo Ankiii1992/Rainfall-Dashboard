@@ -5,6 +5,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import json
+import os
 
 # --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
@@ -215,58 +216,63 @@ if selected_talukas:
 # --- Choropleth Map Section ---
 st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
 
-
-# Load GeoJSON\
+# ✅ Confirm GeoJSON file exists and load it
 if os.path.exists("gujarat_taluka_clean.geojson"):
     with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
         taluka_geojson = json.load(f)
     st.success(f"✅ GeoJSON loaded — {len(taluka_geojson['features'])} features found.")
+
+    # Normalize names in both GeoJSON and DataFrame
+    for feature in taluka_geojson["features"]:
+        feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
+
+    df_map = df.copy()
+    df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
+
+    # Classify rainfall
+    def classify_rainfall(mm):
+        if mm <= 10: return "Very Low"
+        elif mm <= 25: return "Low"
+        elif mm <= 50: return "Moderate"
+        elif mm <= 100: return "Heavy"
+        elif mm <= 150: return "Very Heavy"
+        elif mm <= 200: return "Intense"
+        elif mm <= 300: return "Extreme"
+        else: return "Exceptional"
+
+    df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
+
+    color_map = {
+        "Very Low": "#cceeff",
+        "Low": "#66ffcc",
+        "Moderate": "#33cc33",
+        "Heavy": "#ffff66",
+        "Very Heavy": "#ff9933",
+        "Intense": "#ff3333",
+        "Extreme": "#ff66cc",
+        "Exceptional": "#9900cc"
+    }
+
+    fig = px.choropleth_mapbox(
+        df_map,
+        geojson=taluka_geojson,
+        featureidkey="properties.SUB_DISTRICT",
+        locations="Taluka",
+        color="Rainfall Category",
+        color_discrete_map=color_map,
+        mapbox_style="carto-positron",
+        center={"lat": 22.5, "lon": 71.5},
+        zoom=6,
+        opacity=0.75,
+        height=650,
+        hover_name="Taluka",
+        hover_data=["District", "Total_mm"]
+    )
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+    st.plotly_chart(fig, use_container_width=True)
+
 else:
     st.error("❌ GeoJSON file not found.")
-# Prepare rainfall data for map
-df_map = df.copy()
-df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
-
-def classify_rainfall(mm):
-    if mm <= 10: return "Very Low"
-    elif mm <= 25: return "Low"
-    elif mm <= 50: return "Moderate"
-    elif mm <= 100: return "Heavy"
-    elif mm <= 150: return "Very Heavy"
-    elif mm <= 200: return "Intense"
-    elif mm <= 300: return "Extreme"
-    else: return "Exceptional"
-
-df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
-
-color_map = {
-    "Very Low": "#cceeff",
-    "Low": "#66ffcc",
-    "Moderate": "#33cc33",
-    "Heavy": "#ffff66",
-    "Very Heavy": "#ff9933",
-    "Intense": "#ff3333",
-    "Extreme": "#ff66cc",
-    "Exceptional": "#9900cc"
-}
-
-fig = px.choropleth_mapbox(
-    df_map,
-    geojson=taluka_geojson,
-    featureidkey="properties.SUB_DISTRICT",
-    locations="Taluka",
-    color="Rainfall Category",
-    color_discrete_map=color_map,
-    mapbox_style="carto-positron",
-    center={"lat": 22.5, "lon": 71.5},
-    zoom=6,
-    opacity=0.75,
-    height=650,
-    hover_name="Taluka",
-    hover_data=["District", "Total_mm"]
-)
-fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-st.plotly_chart(fig, use_container_width=True)
 
 # --- Table Section ---
 st.markdown("### 📋 Full Rainfall Data Table")

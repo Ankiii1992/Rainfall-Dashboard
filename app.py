@@ -168,6 +168,10 @@ st.markdown("### Overview")
 row1 = st.columns(3)
 row2 = st.columns(3)
 
+# Get label for the latest slot
+last_slot_label = slot_labels[existing_order[-1]]
+
+# Metric tiles
 row1_titles = [
     ("Total Talukas with Rainfall", num_talukas_with_rain),
     ("Highest Rainfall Total", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p>"),

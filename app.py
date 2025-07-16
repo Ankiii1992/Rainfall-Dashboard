@@ -171,7 +171,7 @@ row2 = st.columns(3)
 row1_titles = [
     ("Total Talukas with Rainfall", num_talukas_with_rain),
     ("Highest Rainfall Total", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p>"),
-    ("Highest Rainfall in Last 2 Hours", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p>")
+    ("Highest Rainfall in Last 2 Hours ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p>")
 ]
 
 row2_titles = [

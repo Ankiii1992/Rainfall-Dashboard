@@ -10,11 +10,11 @@ import os
 # --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
 
-# --- Enhanced CSS ---
+# --- Updated CSS (Freepik-style card tiles) ---
 st.markdown("""
 <style>
     html, body, .main {
-        background-color: #f3f6fa;
+        background-color: #f4f7fb;
         font-family: 'Segoe UI', sans-serif;
     }
     .title-text {
@@ -27,37 +27,23 @@ st.markdown("""
         padding: 0.8rem;
     }
     .metric-tile {
-        background: linear-gradient(135deg, #f0faff, #e0f2f1);
-        padding: 1.2rem 1.4rem 1rem 1.4rem;
-        border-radius: 1.25rem;
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+        background: #ffffff;
+        padding: 1.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
         text-align: center;
-        transition: 0.3s ease;
-        border: 1px solid #c5e1e9;
-        height: 165px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    .metric-tile:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e0e0e0;
     }
     .metric-tile h4 {
-        color: #01579b;
-        font-size: 1.05rem;
-        margin-bottom: 0.2rem;
+        color: #6c757d;
+        font-size: 1.2rem;
+        font-weight: 600;
     }
     .metric-tile h2 {
-        font-size: 2.2rem;
-        color: #0077b6;
-        margin: 0.1rem 0 0.1rem 0;
-        font-weight: 700;
-    }
-    .metric-tile p {
-        margin: 0 0 0;
-        font-size: 0.95rem;
-        color: #37474f;
+        font-size: 2.6rem;
+        color: #222;
+        font-weight: 800;
+        margin: 0.5rem 0 0.2rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -104,9 +90,9 @@ available_dates = sorted(
     reverse=True
 )
 
-st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+st.markdown("<div class='title-text'>\ud83c\udf27\ufe0f Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
-selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
+selected_tab = st.selectbox("\ud83d\uddd5\ufe0f Select Date", available_dates, index=0)
 df = data_by_date[selected_tab]
 df.columns = df.columns.str.strip()
 
@@ -161,74 +147,48 @@ more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
 more_than_50 = df[df['Total_mm'] > 50].shape[0]
 
-st.markdown(f"#### 📊 Latest data available for time slot: **{slot_labels[existing_order[-1]]}**")
+last_slot_label = slot_labels[existing_order[-1]]
 
-# --- Metric Tiles with UI update only ---
+st.markdown(f"#### \ud83d\udcca Latest data available for time slot: **{last_slot_label}**")
+st.markdown("### Overview")
+
+# --- Enhanced Tiles Section ---
 row1 = st.columns(3)
-row2 = st.columns(3)
-
 with row1[0]:
-    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class='metric-tile'>
-        <h4>Total Talukas with Rainfall</h4>
-        <h2>{num_talukas_with_rain}</h2>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-container'><div class='metric-tile'>", unsafe_allow_html=True)
+    st.markdown(f"<h4>Total Talukas with Rainfall</h4><h2>{num_talukas_with_rain}</h2>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 with row1[1]:
-    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class='metric-tile'>
-        <h4>Highest Rainfall Total</h4>
-        <h2>{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p></h2>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-container'><div class='metric-tile'>", unsafe_allow_html=True)
+    st.markdown(f"<h4>Highest Rainfall Total</h4><h2>{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p></h2>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 with row1[2]:
-    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class='metric-tile'>
-        <h4>Highest Rainfall in Last 2 Hours</h4>
-        <h2>{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p></h2>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-container'><div class='metric-tile'>", unsafe_allow_html=True)
+    st.markdown(f"<h4>Highest Rainfall in Last 2 Hours ({last_slot_label})</h4><h2>{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']} mm</p></h2>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
+st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
+
+row2 = st.columns(3)
 with row2[0]:
-    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class='metric-tile'>
-        <h4>Talukas > 150 mm</h4>
-        <h2>{more_than_150}</h2>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-container'><div class='metric-tile'>", unsafe_allow_html=True)
+    st.markdown(f"<h4>Talukas > 150 mm</h4><h2>{more_than_150}</h2>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 with row2[1]:
-    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class='metric-tile'>
-        <h4>Talukas > 100 mm</h4>
-        <h2>{more_than_100}</h2>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-container'><div class='metric-tile'>", unsafe_allow_html=True)
+    st.markdown(f"<h4>Talukas > 100 mm</h4><h2>{more_than_100}</h2>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 with row2[2]:
-    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class='metric-tile'>
-        <h4>Talukas > 50 mm</h4>
-        <h2>{more_than_50}</h2>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-container'><div class='metric-tile'>", unsafe_allow_html=True)
+    st.markdown(f"<h4>Talukas > 50 mm</h4><h2>{more_than_50}</h2>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 # --- Chart Section ---
-st.markdown("### 📈 Rainfall Trend by Time Slot")
+st.markdown("### \ud83d\udcc8 Rainfall Trend by Time Slot")
 selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:
@@ -249,12 +209,12 @@ if selected_talukas:
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Choropleth Map Section ---
-st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
+st.markdown("### \ud83d\uddfd\ufe0f Gujarat Rainfall Map (by Taluka)")
 
 if os.path.exists("gujarat_taluka_clean.geojson"):
     with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
         taluka_geojson = json.load(f)
-    st.success(f"✅ GeoJSON loaded — {len(taluka_geojson['features'])} features found.")
+    st.success(f"\u2705 GeoJSON loaded — {len(taluka_geojson['features'])} features found.")
 
     for feature in taluka_geojson["features"]:
         feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
@@ -304,10 +264,10 @@ if os.path.exists("gujarat_taluka_clean.geojson"):
     st.plotly_chart(fig, use_container_width=True)
 
 else:
-    st.error("❌ GeoJSON file not found.")
+    st.error("\u274c GeoJSON file not found.")
 
 # --- Table Section ---
-st.markdown("### 📋 Full Rainfall Data Table")
+st.markdown("### \ud83d\udccb Full Rainfall Data Table")
 df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
 df_display.index += 1
 st.dataframe(df_display, use_container_width=True, height=600)

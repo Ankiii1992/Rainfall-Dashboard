@@ -215,9 +215,13 @@ if selected_talukas:
 # --- Choropleth Map Section ---
 st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
 
-# Load GeoJSON
+
+# Load GeoJSON\
 with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
-    taluka_geojson = json.load(f)
+        taluka_geojson = json.load(f)
+    st.success(f"✅ GeoJSON loaded — {len(taluka_geojson['features'])} features found.")
+else:
+    st.error("❌ GeoJSON file not found.")
 
 # Prepare rainfall data for map
 df_map = df.copy()

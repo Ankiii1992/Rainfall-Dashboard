@@ -210,6 +210,63 @@ if selected_talukas:
     fig.update_layout(showlegend=True)
     fig.update_layout(modebar_remove=['toImage'])
     st.plotly_chart(fig, use_container_width=True)
+    # --- Choropleth Map Section ---
+import json
+
+st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
+
+# Load the dissolved taluka GeoJSON
+with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
+    taluka_geojson = json.load(f)
+
+# Ensure Taluka names are consistent for joining
+df_map = df.copy()
+df_map['Taluka'] = df_map['Taluka'].str.strip().str.lower()
+
+# Classify rainfall categories
+def classify_rainfall(mm):
+    if mm <= 10: return "Very Low"
+    elif mm <= 25: return "Low"
+    elif mm <= 50: return "Moderate"
+    elif mm <= 100: return "Heavy"
+    elif mm <= 150: return "Very Heavy"
+    elif mm <= 200: return "Intense"
+    elif mm <= 300: return "Extreme"
+    else: return "Exceptional"
+
+df_map['Rainfall Category'] = df_map['Total_mm'].apply(classify_rainfall)
+
+# Define custom color scale
+color_map = {
+    "Very Low": "#cceeff",     # Light Blue
+    "Low": "#66ffcc",          # Mint Green
+    "Moderate": "#33cc33",     # Green
+    "Heavy": "#ffff66",        # Yellow
+    "Very Heavy": "#ff9933",   # Orange
+    "Intense": "#ff3333",      # Red
+    "Extreme": "#ff66cc",      # Pink
+    "Exceptional": "#9900cc"   # Purple
+}
+
+# Draw the map
+fig = px.choropleth_mapbox(
+    df_map,
+    geojson=taluka_geojson,
+    featureidkey="properties.SUB_DISTRICT",
+    locations="Taluka",
+    color="Rainfall Category",
+    color_discrete_map=color_map,
+    mapbox_style="carto-positron",
+    center={"lat": 22.5, "lon": 71.5},
+    zoom=6,
+    opacity=0.75,
+    height=650,
+    hover_name="Taluka",
+    hover_data=["District", "Total_mm"]
+)
+
+fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+st.plotly_chart(fig, use_container_width=True)
 
 # --- Table Section ---
 st.markdown("### 📋 Full Rainfall Data Table")

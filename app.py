@@ -134,7 +134,7 @@ df_long = df.melt(
 df_long = df_long.dropna(subset=["Rainfall (mm)"])
 df_long['Time Slot'] = pd.Categorical(df_long['Time Slot'], categories=existing_order, ordered=True)
 
-# 🔧 PATCH: Apply ordered Time Slot Label for x-axis
+# 🔧 Patch: Apply proper ordered Time Slot Label
 df_long['Time Slot Label'] = pd.Categorical(
     df_long['Time Slot'].map(slot_labels),
     categories=list(dict.fromkeys([slot_labels[slot] for slot in existing_order])),
@@ -143,13 +143,12 @@ df_long['Time Slot Label'] = pd.Categorical(
 
 df_long = df_long.sort_values(by=["Taluka", "Time Slot"])
 
-# --- Latest Time Slot & Metric Calculation ---
+# --- Latest Time Slot Info ---
 latest_slot = df_long['Time Slot'].dropna().max()
 latest_slot_label = slot_labels.get(str(latest_slot), str(latest_slot))
 df_latest_slot = df_long[df_long['Time Slot'] == latest_slot]
 top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0]
 
-# --- Show latest available slot info ---
 st.markdown(f"🕒 <span style='font-size:1.1rem;'>Latest available data: <strong>{latest_slot_label}</strong></span>", unsafe_allow_html=True)
 
 # --- Metric Calculations ---
@@ -193,11 +192,7 @@ st.markdown("### 📈 Rainfall Trend by Time Slot")
 selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:
-    plot_df = (
-        df_long[df_long['Taluka'].isin(selected_talukas)]
-        .groupby(['Taluka', 'Time Slot', 'Time Slot Label'], as_index=False)['Rainfall (mm)']
-        .sum()
-    )
+    plot_df = df_long[df_long['Taluka'].isin(selected_talukas)].copy()
 
     fig = px.line(
         plot_df,
@@ -222,4 +217,4 @@ if selected_talukas:
 st.markdown("### 📋 Full Rainfall Data Table")
 df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
 df_display.index += 1
-st.table(df_display)  # Table with no download/export
+st.table(df_display)  # Table view with no download/export

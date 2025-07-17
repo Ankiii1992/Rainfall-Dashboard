@@ -319,7 +319,7 @@ if taluka_geojson:
         featureidkey="properties.SUB_DISTRICT",
         locations="Taluka",
         color="Rainfall Category",
-        color_discrete_map=color_map, # Uses the `color_map` defined earlier
+        color_discrete_map=color_map,
         mapbox_style="open-street-map",
         center={"lat": 22.5, "lon": 71.5},
         zoom=6,
@@ -331,7 +331,7 @@ if taluka_geojson:
     )
     fig.update_layout(
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        # --- PLOTLY COLOR BAR CONFIGURATION ---
+        # --- PLOTLY COLOR BAR CONFIGURATION FOR BOTTOM PLACEMENT ---
         coloraxis_colorbar=dict(
             title="Rainfall (mm)", # Title for the color bar
             orientation="h",       # Make it horizontal
@@ -339,13 +339,15 @@ if taluka_geojson:
             thickness=20,          # Thickness of the color bar
             lenmode="fraction",    # Use fraction of the plot width for length
             len=0.7,               # Length of the color bar (70% of plot width)
-            x=0.5,                 # Center horizontally (0 to 1)
-            xanchor="center",
-            y=-0.15,               # Position below the map area (adjust as needed, negative values move it down)
-            yanchor="top",         # Anchor point for y
-            # Add tick values and text for categories (optional, but good for discrete scales)
+            x=0.5,                 # Center horizontally (0 to 1, where 0 is left, 1 is right)
+            xanchor="center",      # Anchor point for x (center means x=0.5 will center it)
+            y=-0.15,               # Position below the map area (adjust this value as needed, negative values move it down relative to plot bottom)
+            yanchor="top",         # Anchor point for y (top means the top edge of the color bar is at y)
+            # Add tick values and text for categories (this includes the range)
             tickvals=[i for i in range(len(ordered_categories))],
-            ticktext=[f"{cat}: {category_ranges.get(cat, '')}" for cat in ordered_categories]
+            ticktext=[f"{cat}<br>({category_ranges.get(cat, '')})" for cat in ordered_categories], # Using <br> for multi-line text
+            # Add specific colors to the tick labels if desired (this is advanced and often not necessary for categorical)
+            # tickfont=dict(color=[color_map[cat] for cat in ordered_categories]) # Uncomment if you want colored text labels
         )
     )
     st.plotly_chart(fig, use_container_width=True)

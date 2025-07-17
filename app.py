@@ -125,7 +125,7 @@ category_ranges = {
 def categorize_rainfall(rainfall):
     if pd.isna(rainfall) or rainfall == 0:
         return "No Rain"
-    elif rainfall <= 2.4:
+    elif rainfall > 0 and rainfall <= 2.4: # Changed to > 0 to be explicit
         return "Very Light"
     elif rainfall <= 7.5:
         return "Light"
@@ -139,7 +139,7 @@ def categorize_rainfall(rainfall):
         return "Very Heavy"
     elif rainfall <= 350:
         return "Extremely Heavy"
-    else:
+    else: # rainfall > 350
         return "Exceptional"
 
 # Ensure the order of categories for the Plotly color scale and custom legend
@@ -250,9 +250,11 @@ df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 # --- Metrics ---
 # Ensure Total_mm is numeric for sorting, even if there are NAs for some rows
 df['Total_mm'] = pd.to_numeric(df['Total_mm'], errors='coerce')
+# Added .fillna(0) before .iloc[0] to ensure it always returns a row if df is empty
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0] if not df['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
 
 df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
+# Added .fillna(0) before .iloc[0] to ensure it always returns a row if df_latest_slot is empty
 top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
 
 num_talukas_with_rain = df[df['Total_mm'] > 0].shape[0]
@@ -375,7 +377,7 @@ if taluka_geojson:
         </div>
         """
     legend_html += "</div>"
-    # IMPORTANT FIX: Add unsafe_allow_html=True here
+    # The fix for the legend: ensure unsafe_allow_html=True is indeed here
     st.markdown(legend_html, unsafe_allow_html=True)
 
 

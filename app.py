@@ -10,10 +10,7 @@ import os
 # --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
 
-# --- Custom CSS for UI (removed problematic unsafe_allow_html parts) ---
-# NOTE: The CSS for disabling right-click and hiding the dataframe button
-# will LIKELY NOT WORK if unsafe_allow_html=True is disabled in your environment.
-# I'm keeping it here for completeness, but expect it to be ineffective.
+# --- Enhanced CSS (Still apply this, assuming it works for general styling) ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -63,7 +60,8 @@ st.markdown("""
         color: #37474f;
     }
 
-    /* These CSS rules for the download button will likely NOT WORK */
+    /* These CSS rules for the download button will likely NOT WORK if unsafe_allow_html=True */
+    /* does not permit direct injection of elements to hide Streamlit's native components */
     .stDataFrame header {
         display: none !important;
     }
@@ -74,35 +72,29 @@ st.markdown("""
         display: none !important;
     }
 
-    /* Custom legend styling - NO LONGER USED FOR HTML INJECTION */
-    /* .legend-container, .legend-item, .legend-color-box styles are effectively moot */
-    /* if unsafe_allow_html is disabled for the entire markdown block */
-
 </style>
 
 <script>
     document.addEventListener('contextmenu', event => event.preventDefault());
 </script>
-""", unsafe_allow_html=True) # Keep unsafe_allow_html for the CSS block itself, though its effect on embedded JS/CSS depends on your environment's strictness.
+""", unsafe_allow_html=True)
 
 
-# --- REMOVED DIAGNOSTIC TEST HTML ---
-# It confirmed unsafe_allow_html=True is not working.
-
-# --- Rainfall Category & Color Mapping ---
-category_colors = {
-    "No Rain": "⚪ (No Rain)",      # Now using text/emoji representation
-    "Very Light": "🟢 (Very Light)",
-    "Light": "🟩 (Light)",
-    "Moderate": "🟨 (Moderate)",
-    "Rather Heavy": "🟧 (Rather Heavy)",
-    "Heavy": "🟥 (Heavy)",
-    "Very Heavy": "🟪 (Very Heavy)", # Purple square emoji
-    "Extremely Heavy": "🟫 (Extremely Heavy)", # Brown square emoji, no exact deep purple
-    "Exceptional": "🌸 (Exceptional)" # Pink flower as placeholder
+# --- Rainfall Category & Color Mapping (for Plotly map) ---
+# These are the categories and their associated colors that will appear in the Plotly color bar.
+color_map = {
+    "No Rain": "#f0f0f0",
+    "Very Light": "#c8e6c9",
+    "Light": "#00ff01",
+    "Moderate": "#ffff00",
+    "Rather Heavy": "#ffa500",
+    "Heavy": "#d61a1c",
+    "Very Heavy": "#3b0030",
+    "Extremely Heavy": "#4c0073",
+    "Exceptional": "#ffdbff"
 }
 
-category_ranges = {
+category_ranges = { # These ranges are for informational purposes, Plotly displays its own
     "No Rain": "0 mm",
     "Very Light": "0.1 – 2.4 mm",
     "Light": "2.5 – 7.5 mm",
@@ -114,7 +106,7 @@ category_ranges = {
     "Exceptional": "> 350 mm"
 }
 
-def categorize_rainfall(rainfall):
+def classify_rainfall(rainfall):
     if pd.isna(rainfall) or rainfall == 0:
         return "No Rain"
     elif rainfall > 0 and rainfall <= 2.4:
@@ -134,7 +126,7 @@ def categorize_rainfall(rainfall):
     else:
         return "Exceptional"
 
-# Ensure the order of categories for the Plotly color scale and custom legend
+# Ensure the order of categories for the Plotly color scale
 ordered_categories = [
     "No Rain", "Very Light", "Light", "Moderate", "Rather Heavy",
     "Heavy", "Very Heavy", "Extremely Heavy", "Exceptional"
@@ -195,7 +187,7 @@ available_dates = sorted(
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
-df = data_by_date[selected_tab].copy()
+df = data_by_date[selected_tab].copy() # Use .copy() to avoid SettingWithCopyWarning
 df.columns = df.columns.str.strip()
 
 time_slot_columns = [col for col in df.columns if "TO" in col]
@@ -272,8 +264,6 @@ row2_titles = [
 
 for col, (label, value) in zip(row1, row1_titles):
     with col:
-        # These st.markdown calls use HTML for formatting, but they are simple and often work
-        # even if complex HTML injection is blocked. It depends on the strictness of the environment.
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
         st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -316,26 +306,12 @@ if taluka_geojson:
 
     df_map = df.copy()
     df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
-    df_map["Rainfall Category"] = df_map["Total_mm"].apply(categorize_rainfall)
+    df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
     df_map["Rainfall Category"] = pd.Categorical(
         df_map["Rainfall Category"],
         categories=ordered_categories,
         ordered=True
     )
-
-    # Re-map category colors for Plotly based on original colors (NOT emoji for map)
-    # This color_discrete_map will work fine for the map itself.
-    plotly_category_colors = {
-        "No Rain": "#f0f0f0",
-        "Very Light": "#c8e6c9",
-        "Light": "#00ff01",
-        "Moderate": "#ffff00",
-        "Rather Heavy": "#ffa500",
-        "Heavy": "#d61a1c",
-        "Very Heavy": "#3b0030",
-        "Extremely Heavy": "#4c0073",
-        "Exceptional": "#ffdbff"
-    }
 
     fig = px.choropleth_mapbox(
         df_map,
@@ -343,7 +319,7 @@ if taluka_geojson:
         featureidkey="properties.SUB_DISTRICT",
         locations="Taluka",
         color="Rainfall Category",
-        color_discrete_map=plotly_category_colors, # Use original colors for the map
+        color_discrete_map=color_map, # Uses the `color_map` defined earlier
         mapbox_style="open-street-map",
         center={"lat": 22.5, "lon": 71.5},
         zoom=6,
@@ -354,26 +330,25 @@ if taluka_geojson:
         title="Gujarat Rainfall Distribution by Taluka"
     )
     fig.update_layout(
-        margin={"r": 0, "t": 40, "l": 0, "b": 0},
-        showlegend=False # Still disable Plotly's default legend
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        # --- PLOTLY COLOR BAR CONFIGURATION ---
+        coloraxis_colorbar=dict(
+            title="Rainfall (mm)", # Title for the color bar
+            orientation="h",       # Make it horizontal
+            thicknessmode="pixels",
+            thickness=20,          # Thickness of the color bar
+            lenmode="fraction",    # Use fraction of the plot width for length
+            len=0.7,               # Length of the color bar (70% of plot width)
+            x=0.5,                 # Center horizontally (0 to 1)
+            xanchor="center",
+            y=-0.15,               # Position below the map area (adjust as needed, negative values move it down)
+            yanchor="top",         # Anchor point for y
+            # Add tick values and text for categories (optional, but good for discrete scales)
+            tickvals=[i for i in range(len(ordered_categories))],
+            ticktext=[f"{cat}: {category_ranges.get(cat, '')}" for cat in ordered_categories]
+        )
     )
     st.plotly_chart(fig, use_container_width=True)
-
-    # --- NATIVE STREAMLIT LEGEND below the map ---
-    st.markdown("#### Rainfall Categories (mm)")
-    # Using st.columns to create a more structured, native legend appearance
-    num_cols = 2 # Or 3, depending on how many you want per row
-    cols = st.columns(num_cols)
-    col_idx = 0
-
-    for category in ordered_categories:
-        # Get the text/emoji representation for the legend
-        display_name = category_colors.get(category, category)
-        range_str = category_ranges.get(category, "")
-
-        with cols[col_idx]:
-            st.write(f"**{display_name}:** {range_str}")
-        col_idx = (col_idx + 1) % num_cols
 
 else:
     st.error("❌ GeoJSON file (gujarat_taluka_clean.geojson) not found. Please ensure it's in the same directory as your app.")

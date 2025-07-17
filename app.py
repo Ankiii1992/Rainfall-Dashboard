@@ -10,7 +10,7 @@ import os
 # --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
 
-# --- Enhanced CSS ---
+# --- Custom CSS for UI and to disable right-click and dataframe download button ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -59,9 +59,101 @@ st.markdown("""
         font-size: 0.95rem;
         color: #37474f;
     }
+    /* Hide the download button from st.dataframe */
+    [data-testid="stElementToolbar"] {
+        display: none;
+    }
+    /* Custom legend styling */
+    .legend-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-top: 1.5rem;
+        padding: 1rem;
+        background-color: #ffffff;
+        border-radius: 0.75rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin: 0.5rem 1rem;
+        font-size: 0.9rem;
+        color: #37474f;
+    }
+    .legend-color-box {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        margin-right: 0.7rem;
+        border: 1px solid rgba(0,0,0,0.1);
+    }
 </style>
+
+<script>
+    document.addEventListener('contextmenu', event => event.preventDefault());
+</script>
 """, unsafe_allow_html=True)
 
+
+# --- Rainfall Category & Color Mapping ---
+category_colors = {
+    "Very Light": "#c8e6c9",    # Light Green
+    "Light": "#00ff01",         # Bright Green
+    "Moderate": "#ffff00",      # Yellow
+    "Rather Heavy": "#ffa500",  # Orange
+    "Heavy": "#d61a1c",         # Red
+    "Very Heavy": "#3b0030",    # Dark Purple
+    "Extremely Heavy": "#4c0073", # Deeper Purple
+    "Exceptional": "#ffdbff"    # Light Pink/Magenta
+}
+
+category_ranges = {
+    "Very Light": "0.1 – 2.4 mm",
+    "Light": "2.5 – 7.5 mm",
+    "Moderate": "7.6 – 35.5 mm",
+    "Rather Heavy": "35.6 – 64.4 mm",
+    "Heavy": "64.5 – 124.4 mm",
+    "Very Heavy": "124.5 – 244.4 mm",
+    "Extremely Heavy": "244.5 – 350 mm",
+    "Exceptional": "> 350 mm"
+}
+
+def categorize_rainfall(rainfall):
+    if pd.isna(rainfall) or rainfall == 0: # Explicitly handle 0 and NA for "No Rain"
+        return "No Rain" # Assign a "No Rain" category
+    elif rainfall <= 2.4:
+        return "Very Light"
+    elif rainfall <= 7.5:
+        return "Light"
+    elif rainfall <= 35.5:
+        return "Moderate"
+    elif rainfall <= 64.4:
+        return "Rather Heavy"
+    elif rainfall <= 124.4:
+        return "Heavy"
+    elif rainfall <= 244.4:
+        return "Very Heavy"
+    elif rainfall <= 350:
+        return "Extremely Heavy"
+    else:
+        return "Exceptional"
+
+# Add "No Rain" to the category_colors if you want it explicitly mapped on the map (e.g., to grey)
+# If not, talukas with 0 rainfall will simply not be colored by the choropleth color scale.
+# For the purpose of the map legend, it's good to include it if you expect to show it.
+# Let's define it as a light grey.
+category_colors["No Rain"] = "#f0f0f0" # A very light grey for no rain
+category_ranges["No Rain"] = "0 mm"
+
+# Ensure the order of categories for the Plotly color scale and custom legend
+# This is important for consistent visual representation
+ordered_categories = [
+    "No Rain", "Very Light", "Light", "Moderate", "Rather Heavy",
+    "Heavy", "Very Heavy", "Extremely Heavy", "Exceptional"
+]
+
+# --- Load all sheet tabs (cached) ---
 @st.cache_data
 def load_all_sheet_tabs():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -96,6 +188,15 @@ def load_all_sheet_tabs():
 
     return data_by_date
 
+# --- Load GeoJSON (cached resource) ---
+@st.cache_resource
+def load_geojson(path):
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            geojson_data = json.load(f)
+        return geojson_data
+    return None
+
 # --- Load data ---
 data_by_date = load_all_sheet_tabs()
 available_dates = sorted(
@@ -107,12 +208,12 @@ available_dates = sorted(
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
-df = data_by_date[selected_tab]
+df = data_by_date[selected_tab].copy() # Make a copy to avoid SettingWithCopyWarning
 df.columns = df.columns.str.strip()
 
 time_slot_columns = [col for col in df.columns if "TO" in col]
 time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
-                   '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
+                    '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
 existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
 
 slot_labels = {
@@ -152,9 +253,12 @@ df_long['Time Slot Label'] = pd.Categorical(
 df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 
 # --- Metrics ---
-top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0]
+# Ensure Total_mm is numeric for sorting, even if there are NAs for some rows
+df['Total_mm'] = pd.to_numeric(df['Total_mm'], errors='coerce')
+top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0] if not df['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
+
 df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
-top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0]
+top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
 
 num_talukas_with_rain = df[df['Total_mm'] > 0].shape[0]
 more_than_150 = df[df['Total_mm'] > 150].shape[0]
@@ -220,12 +324,9 @@ if selected_talukas:
 # --- Choropleth Map Section ---
 st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
 
-# ✅ Confirm GeoJSON file exists and load it
-if os.path.exists("gujarat_taluka_clean.geojson"):
-    with open("gujarat_taluka_clean.geojson", "r", encoding="utf-8") as f:
-        taluka_geojson = json.load(f)
-    st.success(f"✅ GeoJSON loaded — {len(taluka_geojson['features'])} features found.")
+taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
 
+if taluka_geojson:
     # Normalize names in both GeoJSON and DataFrame
     for feature in taluka_geojson["features"]:
         feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
@@ -233,29 +334,15 @@ if os.path.exists("gujarat_taluka_clean.geojson"):
     df_map = df.copy()
     df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
 
-    # Classify rainfall
-    def classify_rainfall(mm):
-        if mm <= 10: return "Very Low"
-        elif mm <= 25: return "Low"
-        elif mm <= 50: return "Moderate"
-        elif mm <= 100: return "Heavy"
-        elif mm <= 150: return "Very Heavy"
-        elif mm <= 200: return "Intense"
-        elif mm <= 300: return "Extreme"
-        else: return "Exceptional"
+    # Apply new categorization
+    df_map["Rainfall Category"] = df_map["Total_mm"].apply(categorize_rainfall)
 
-    df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
-
-    color_map = {
-        "Very Low": "#cceeff",
-        "Low": "#66ffcc",
-        "Moderate": "#33cc33",
-        "Heavy": "#ffff66",
-        "Very Heavy": "#ff9933",
-        "Intense": "#ff3333",
-        "Extreme": "#ff66cc",
-        "Exceptional": "#9900cc"
-    }
+    # Convert 'Rainfall Category' to a categorical type with defined order
+    df_map["Rainfall Category"] = pd.Categorical(
+        df_map["Rainfall Category"],
+        categories=ordered_categories,
+        ordered=True
+    )
 
     fig = px.choropleth_mapbox(
         df_map,
@@ -263,24 +350,44 @@ if os.path.exists("gujarat_taluka_clean.geojson"):
         featureidkey="properties.SUB_DISTRICT",
         locations="Taluka",
         color="Rainfall Category",
-        color_discrete_map=color_map,
+        color_discrete_map=category_colors, # Use your custom colors
         mapbox_style="open-street-map",
         center={"lat": 22.5, "lon": 71.5},
         zoom=6,
         opacity=0.75,
         height=650,
         hover_name="Taluka",
-        hover_data=["District", "Total_mm"]
+        hover_data=["District", "Total_mm"],
+        title="Gujarat Rainfall Distribution by Taluka"
     )
-    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+    fig.update_layout(
+        margin={"r": 0, "t": 40, "l": 0, "b": 0}, # Adjusted top margin for title
+        # Remove Plotly's default legend as we'll create a custom one
+        showlegend=False
+    )
     st.plotly_chart(fig, use_container_width=True)
 
+    # --- Custom Legend below the map ---
+    st.markdown("#### Rainfall Categories (mm)")
+    legend_html = "<div class='legend-container'>"
+    for category in ordered_categories:
+        color = category_colors.get(category, "#CCCCCC") # Default grey if color not found
+        range_str = category_ranges.get(category, "")
+        legend_html += f"""
+        <div class='legend-item'>
+            <div class='legend-color-box' style='background-color: {color};'></div>
+            <b>{category}:</b> {range_str}
+        </div>
+        """
+    legend_html += "</div>"
+    st.markdown(legend_html, unsafe_allow_html=True)
+
+
 else:
-    st.error("❌ GeoJSON file not found.")
+    st.error("❌ GeoJSON file (gujarat_taluka_clean.geojson) not found. Please ensure it's in the same directory as your app.")
 
 # --- Table Section ---
 st.markdown("### 📋 Full Rainfall Data Table")
 df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
 df_display.index += 1
 st.dataframe(df_display, use_container_width=True, height=600)
-

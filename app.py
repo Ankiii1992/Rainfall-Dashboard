@@ -59,11 +59,17 @@ st.markdown("""
         font-size: 0.95rem;
         color: #37474f;
     }
-    /* Hide the download button from st.dataframe and the dataframe toolbar */
-    /* Targeting the toolbar more broadly to remove the download button */
-    div.stDataFrame div.stToolbar {
-        display: none;
+
+    /* FIX ATTEMPT for Download button: Target any button within the toolbar */
+    .stDataFrame .stToolbar button {
+        display: none !important; /* Use !important to override other styles */
     }
+    /* If the above doesn't work, try targeting the entire toolbar */
+    .stDataFrame .stToolbar {
+        display: none !important;
+    }
+
+
     /* Custom legend styling */
     .legend-container {
         display: flex;
@@ -125,7 +131,7 @@ category_ranges = {
 def categorize_rainfall(rainfall):
     if pd.isna(rainfall) or rainfall == 0:
         return "No Rain"
-    elif rainfall > 0 and rainfall <= 2.4: # Changed to > 0 to be explicit
+    elif rainfall > 0 and rainfall <= 2.4:
         return "Very Light"
     elif rainfall <= 7.5:
         return "Light"
@@ -366,19 +372,22 @@ if taluka_geojson:
 
     # --- Custom Legend below the map ---
     st.markdown("#### Rainfall Categories (mm)")
-    legend_html = "<div class='legend-container'>"
+    # Re-generating legend_html to be absolutely sure of formatting
+    legend_html_parts = ["<div class='legend-container'>"]
     for category in ordered_categories:
         color = category_colors.get(category, "#CCCCCC") # Default grey if color not found
         range_str = category_ranges.get(category, "")
-        legend_html += f"""
+        legend_html_parts.append(f"""
         <div class='legend-item'>
             <div class='legend-color-box' style='background-color: {color};'></div>
             <b>{category}:</b> {range_str}
         </div>
-        """
-    legend_html += "</div>"
-    # The fix for the legend: ensure unsafe_allow_html=True is indeed here
-    st.markdown(legend_html, unsafe_allow_html=True)
+        """)
+    legend_html_parts.append("</div>")
+    final_legend_html = "\n".join(legend_html_parts) # Join with newlines for readability
+
+    # This is the line that needs unsafe_allow_html=True
+    st.markdown(final_legend_html, unsafe_allow_html=True)
 
 
 else:

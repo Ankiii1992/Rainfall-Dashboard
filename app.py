@@ -59,8 +59,9 @@ st.markdown("""
         font-size: 0.95rem;
         color: #37474f;
     }
-    /* Hide the download button from st.dataframe */
-    [data-testid="stElementToolbar"] {
+    /* Hide the download button from st.dataframe and the dataframe toolbar */
+    /* Targeting the toolbar more broadly to remove the download button */
+    div.stDataFrame div.stToolbar {
         display: none;
     }
     /* Custom legend styling */
@@ -98,6 +99,7 @@ st.markdown("""
 
 # --- Rainfall Category & Color Mapping ---
 category_colors = {
+    "No Rain": "#f0f0f0",      # A very light grey for no rain
     "Very Light": "#c8e6c9",    # Light Green
     "Light": "#00ff01",         # Bright Green
     "Moderate": "#ffff00",      # Yellow
@@ -109,6 +111,7 @@ category_colors = {
 }
 
 category_ranges = {
+    "No Rain": "0 mm",
     "Very Light": "0.1 – 2.4 mm",
     "Light": "2.5 – 7.5 mm",
     "Moderate": "7.6 – 35.5 mm",
@@ -120,8 +123,8 @@ category_ranges = {
 }
 
 def categorize_rainfall(rainfall):
-    if pd.isna(rainfall) or rainfall == 0: # Explicitly handle 0 and NA for "No Rain"
-        return "No Rain" # Assign a "No Rain" category
+    if pd.isna(rainfall) or rainfall == 0:
+        return "No Rain"
     elif rainfall <= 2.4:
         return "Very Light"
     elif rainfall <= 7.5:
@@ -139,15 +142,7 @@ def categorize_rainfall(rainfall):
     else:
         return "Exceptional"
 
-# Add "No Rain" to the category_colors if you want it explicitly mapped on the map (e.g., to grey)
-# If not, talukas with 0 rainfall will simply not be colored by the choropleth color scale.
-# For the purpose of the map legend, it's good to include it if you expect to show it.
-# Let's define it as a light grey.
-category_colors["No Rain"] = "#f0f0f0" # A very light grey for no rain
-category_ranges["No Rain"] = "0 mm"
-
 # Ensure the order of categories for the Plotly color scale and custom legend
-# This is important for consistent visual representation
 ordered_categories = [
     "No Rain", "Very Light", "Light", "Moderate", "Rather Heavy",
     "Heavy", "Very Heavy", "Extremely Heavy", "Exceptional"
@@ -380,6 +375,7 @@ if taluka_geojson:
         </div>
         """
     legend_html += "</div>"
+    # IMPORTANT FIX: Add unsafe_allow_html=True here
     st.markdown(legend_html, unsafe_allow_html=True)
 
 

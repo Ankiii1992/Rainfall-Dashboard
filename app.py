@@ -60,12 +60,17 @@ st.markdown("""
         color: #37474f;
     }
 
-    /* FIX ATTEMPT for Download button: Target any button within the toolbar */
-    .stDataFrame .stToolbar button {
-        display: none !important; /* Use !important to override other styles */
+    /* FIX ATTEMPT for Download button: More aggressive targeting */
+    /* Try hiding the entire header of the dataframe first */
+    .stDataFrame header {
+        display: none !important;
     }
-    /* If the above doesn't work, try targeting the entire toolbar */
-    .stDataFrame .stToolbar {
+    /* If that doesn't work, try targeting any button within the toolbar specifically by its testid */
+    [data-testid="stDataFrameToolbar"] button {
+        display: none !important;
+    }
+    /* Or the entire toolbar if the above fails */
+    [data-testid="stDataFrameToolbar"] {
         display: none !important;
     }
 
@@ -103,17 +108,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# --- DIAGNOSTIC TEST HTML (Please observe how this renders) ---
+st.markdown("<h1>This is a Test HTML Heading</h1>", unsafe_allow_html=True)
+st.markdown("---") # Separator
+
+
 # --- Rainfall Category & Color Mapping ---
 category_colors = {
-    "No Rain": "#f0f0f0",      # A very light grey for no rain
-    "Very Light": "#c8e6c9",    # Light Green
-    "Light": "#00ff01",         # Bright Green
-    "Moderate": "#ffff00",      # Yellow
-    "Rather Heavy": "#ffa500",  # Orange
-    "Heavy": "#d61a1c",         # Red
-    "Very Heavy": "#3b0030",    # Dark Purple
-    "Extremely Heavy": "#4c0073", # Deeper Purple
-    "Exceptional": "#ffdbff"    # Light Pink/Magenta
+    "No Rain": "#f0f0f0",
+    "Very Light": "#c8e6c9",
+    "Light": "#00ff01",
+    "Moderate": "#ffff00",
+    "Rather Heavy": "#ffa500",
+    "Heavy": "#d61a1c",
+    "Very Heavy": "#3b0030",
+    "Extremely Heavy": "#4c0073",
+    "Exceptional": "#ffdbff"
 }
 
 category_ranges = {
@@ -145,7 +155,7 @@ def categorize_rainfall(rainfall):
         return "Very Heavy"
     elif rainfall <= 350:
         return "Extremely Heavy"
-    else: # rainfall > 350
+    else:
         return "Exceptional"
 
 # Ensure the order of categories for the Plotly color scale and custom legend
@@ -209,7 +219,7 @@ available_dates = sorted(
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
-df = data_by_date[selected_tab].copy() # Make a copy to avoid SettingWithCopyWarning
+df = data_by_date[selected_tab].copy()
 df.columns = df.columns.str.strip()
 
 time_slot_columns = [col for col in df.columns if "TO" in col]
@@ -254,15 +264,10 @@ df_long['Time Slot Label'] = pd.Categorical(
 df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 
 # --- Metrics ---
-# Ensure Total_mm is numeric for sorting, even if there are NAs for some rows
 df['Total_mm'] = pd.to_numeric(df['Total_mm'], errors='coerce')
-# Added .fillna(0) before .iloc[0] to ensure it always returns a row if df is empty
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0] if not df['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
-
 df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
-# Added .fillna(0) before .iloc[0] to ensure it always returns a row if df_latest_slot is empty
 top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
-
 num_talukas_with_rain = df[df['Total_mm'] > 0].shape[0]
 more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
@@ -275,10 +280,8 @@ st.markdown("### Overview")
 row1 = st.columns(3)
 row2 = st.columns(3)
 
-# Get label for the latest slot
 last_slot_label = slot_labels[existing_order[-1]]
 
-# Metric tiles
 row1_titles = [
     ("Total Talukas with Rainfall", num_talukas_with_rain),
     ("Highest Rainfall Total", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']} mm</p>"),
@@ -330,17 +333,12 @@ st.markdown("### 🗺️ Gujarat Rainfall Map (by Taluka)")
 taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
 
 if taluka_geojson:
-    # Normalize names in both GeoJSON and DataFrame
     for feature in taluka_geojson["features"]:
         feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
 
     df_map = df.copy()
     df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
-
-    # Apply new categorization
     df_map["Rainfall Category"] = df_map["Total_mm"].apply(categorize_rainfall)
-
-    # Convert 'Rainfall Category' to a categorical type with defined order
     df_map["Rainfall Category"] = pd.Categorical(
         df_map["Rainfall Category"],
         categories=ordered_categories,
@@ -353,7 +351,7 @@ if taluka_geojson:
         featureidkey="properties.SUB_DISTRICT",
         locations="Taluka",
         color="Rainfall Category",
-        color_discrete_map=category_colors, # Use your custom colors
+        color_discrete_map=category_colors,
         mapbox_style="open-street-map",
         center={"lat": 22.5, "lon": 71.5},
         zoom=6,
@@ -364,18 +362,16 @@ if taluka_geojson:
         title="Gujarat Rainfall Distribution by Taluka"
     )
     fig.update_layout(
-        margin={"r": 0, "t": 40, "l": 0, "b": 0}, # Adjusted top margin for title
-        # Remove Plotly's default legend as we'll create a custom one
-        showlegend=False
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
+        showlegend=False # Disable Plotly's default legend
     )
     st.plotly_chart(fig, use_container_width=True)
 
     # --- Custom Legend below the map ---
     st.markdown("#### Rainfall Categories (mm)")
-    # Re-generating legend_html to be absolutely sure of formatting
     legend_html_parts = ["<div class='legend-container'>"]
     for category in ordered_categories:
-        color = category_colors.get(category, "#CCCCCC") # Default grey if color not found
+        color = category_colors.get(category, "#CCCCCC")
         range_str = category_ranges.get(category, "")
         legend_html_parts.append(f"""
         <div class='legend-item'>
@@ -384,9 +380,9 @@ if taluka_geojson:
         </div>
         """)
     legend_html_parts.append("</div>")
-    final_legend_html = "\n".join(legend_html_parts) # Join with newlines for readability
+    final_legend_html = "\n".join(legend_html_parts)
 
-    # This is the line that needs unsafe_allow_html=True
+    # THIS IS THE CRITICAL LINE FOR THE LEGEND TO RENDER HTML
     st.markdown(final_legend_html, unsafe_allow_html=True)
 
 

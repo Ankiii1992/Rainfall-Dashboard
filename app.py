@@ -42,7 +42,7 @@ st.markdown("""
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -149,25 +149,21 @@ def load_all_sheet_tabs():
         if not data or len(data) < 2:
             continue
 
-        df_raw = pd.DataFrame(data[1:], columns=data[0])
-        df_raw.columns = df_raw.columns.str.strip() # Clean column names early
+        df = pd.DataFrame(data[1:], columns=data[0])
+        df.replace("", pd.NA, inplace=True)
+        df = df.dropna(how="all")
+        df.columns = df.columns.str.strip()
 
-        # Rename columns before processing
-        df_raw.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
-        df_raw['Taluka'] = df_raw['Taluka'].str.strip() # Strip Taluka names immediately
+        df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
 
-        # Only process rows that have at least a Taluka name, to avoid entirely blank rows
-        df_raw = df_raw.dropna(subset=['Taluka'])
-        
-        # Convert Total_mm to numeric, coercing errors to NaN
-        df_raw["Total_mm"] = pd.to_numeric(df_raw["Total_mm"], errors="coerce")
+        if "Total_mm" in df.columns:
+            df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors="coerce")
 
-        # Convert time slot columns to numeric, coercing errors to NaN
-        for col in df_raw.columns:
+        for col in df.columns:
             if "TO" in col:
-                df_raw[col] = pd.to_numeric(df_raw[col], errors="coerce")
-        
-        data_by_date[tab_name] = df_raw
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        data_by_date[tab_name] = df
 
     return data_by_date
 
@@ -180,9 +176,7 @@ def load_geojson(path):
         return geojson_data
     return None
 
-# --- Main Dashboard Logic ---
-taluka_geojson = load_geojson("gujarat_taluka_clean.geojson") # Load GeoJSON separately
-
+# --- Load data ---
 data_by_date = load_all_sheet_tabs()
 available_dates = sorted(
     data_by_date.keys(),
@@ -193,44 +187,37 @@ available_dates = sorted(
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
-df = data_by_date[selected_tab].copy() # 'df' will be the raw data for the selected day
+df = data_by_date[selected_tab].copy()
+df.columns = df.columns.str.strip()
 
-# --- Fixed Total Talukas for Gujarat ---
-TOTAL_TALUKAS_GUJARAT = 251 # As per the user's clarification, this is a fixed count.
-
-# --- Metrics (using the raw 'df') ---
-# Ensure Total_mm is numeric for calculations, handling potential NaNs from raw data as 0 for sum
-df['Total_mm'] = pd.to_numeric(df['Total_mm'], errors='coerce').fillna(0)
-
-top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0] if not df['Total_mm'].empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
-num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0] # Correctly counts talukas with >0 rainfall
-talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today # This count includes missing talukas that had no rainfall
-
-more_than_150 = df[df['Total_mm'] > 150].shape[0]
-more_than_100 = df[df['Total_mm'] > 100].shape[0]
-more_than_50 = df[df['Total_mm'] > 50].shape[0]
-
-# --- Time Slot Processing (for df_long and top_latest metric) ---
-time_slot_columns = [col for col in df.columns if "TO" in col] # Get time slots from current df
+time_slot_columns = [col for col in df.columns if "TO" in col]
 time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
                     '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
 existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
 
 slot_labels = {
-    "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10TO12": "10–12 AM", # Corrected label
-    "12TO14": "12–2 PM", "14TO16": "2–4 PM", "16TO18": "4–6 PM",
-    "18TO20": "6–8 PM", "20TO22": "8–10 PM", "22TO24": "10–12 PM",
-    "24TO02": "12–2 AM", "02TO04": "2–4 AM", "04TO06": "4–6 AM",
+    "06TO08": "6–8 AM",
+    "08TO10": "8–10 AM",
+    "10TO12": "10–12 AM",
+    "12TO14": "12–2 PM",
+    "14TO16": "2–4 PM",
+    "16TO18": "4–6 PM",
+    "18TO20": "6–8 PM",
+    "20TO22": "8–10 PM",
+    "22TO24": "10–12 PM",
+    "24TO02": "12–2 AM",
+    "02TO04": "2–4 AM",
+    "04TO06": "4–6 AM",
 }
 
-# Melt and clean data for df_long (only includes talukas present in df)
+# Melt and clean data
 df_long = df.melt(
     id_vars=["District", "Taluka", "Total_mm"],
     value_vars=existing_order,
     var_name="Time Slot",
     value_name="Rainfall (mm)"
 )
-df_long = df_long.dropna(subset=["Rainfall (mm)"]) # Drop rows where rainfall became NaN from source if any
+df_long = df_long.dropna(subset=["Rainfall (mm)"])
 df_long['Taluka'] = df_long['Taluka'].str.strip()
 df_long = df_long.groupby(["District", "Taluka", "Time Slot"], as_index=False).agg({
     "Rainfall (mm)": "sum",
@@ -244,9 +231,15 @@ df_long['Time Slot Label'] = pd.Categorical(
 )
 df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 
+# --- Metrics ---
+df['Total_mm'] = pd.to_numeric(df['Total_mm'], errors='coerce')
+top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0] if not df['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
 df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
-top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
-
+top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
+num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
+more_than_150 = df[df['Total_mm'] > 150].shape[0]
+more_than_100 = df[df['Total_mm'] > 100].shape[0]
+more_than_50 = df[df['Total_mm'] > 50].shape[0]
 
 st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
 
@@ -287,17 +280,22 @@ for col, (label, value) in zip(row2, row2_titles):
 # --- Rainfall Distribution Overview (Map and Insights) ---
 st.markdown("### 🗺️ Rainfall Distribution Overview")
 
+taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
+
 if taluka_geojson:
-    # Prepare df_map (using the raw 'df' for actual reported rainfall)
+    # Prepare df_map (using the original df to get categories as per the latest clarification)
+    for feature in taluka_geojson["features"]:
+        feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
+
     df_map = df.copy()
-    # Ensure Taluka names in df_map are lowercased for GeoJSON matching
-    df_map["Taluka_lower"] = df_map["Taluka"].str.lower()
+    df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
     df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
     df_map["Rainfall Category"] = pd.Categorical(
         df_map["Rainfall Category"],
         categories=ordered_categories,
         ordered=True
     )
+    # Add rainfall range to df_map for hover text (only for the bar chart now)
     df_map["Rainfall Range"] = df_map["Rainfall Category"].map(category_ranges)
 
 
@@ -309,8 +307,8 @@ if taluka_geojson:
         fig_map = px.choropleth_mapbox(
             df_map,
             geojson=taluka_geojson,
-            featureidkey="properties.SUB_DISTRICT", # GeoJSON key is already lower for properties
-            locations="Taluka_lower", # Use lowercased taluka for location matching
+            featureidkey="properties.SUB_DISTRICT",
+            locations="Taluka",
             color="Rainfall Category",
             color_discrete_map=color_map,
             mapbox_style="open-street-map",
@@ -318,13 +316,12 @@ if taluka_geojson:
             zoom=6,
             opacity=0.75,
             height=650,
-            hover_name="Taluka", # Use original capitalized Taluka for hover_name
+            hover_name="Taluka",
             hover_data={
                 "District": True,
                 "Total_mm": ":.1f mm", # Format Total_mm in hover
                 "Rainfall Category": False, # DO NOT show Rainfall Category in map hover
-                "Rainfall Range": False, # DO NOT show Rainfall Range in map hover
-                "Taluka_lower": False # Hide the internal lowercased taluka in hover
+                "Rainfall Range": False # DO NOT show Rainfall Range in map hover
             },
             title="Gujarat Rainfall Distribution by Taluka"
         )
@@ -350,7 +347,9 @@ if taluka_geojson:
         st.markdown("#### Key Insights & Distributions")
 
         # --- Pie Chart for Percentage of Talukas with Rainfall ---
-        # Label remains "Talukas without Rainfall" as per latest clarification
+        TOTAL_TALUKAS_GUJARAT = 251 # Constant for total talukas
+        talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
+
         pie_data = pd.DataFrame({
             'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
             'Count': [num_talukas_with_rain_today, talukas_without_rain]
@@ -373,40 +372,20 @@ if taluka_geojson:
         st.plotly_chart(fig_pie, use_container_width=True)
 
         # --- Distribution of Talukas by Rainfall Category (Bar Chart) ---
-        # Calculate counts for categories present in the current df
-        category_counts_from_df = df_map['Rainfall Category'].value_counts().reset_index()
-        category_counts_from_df.columns = ['Category', 'Count']
-
-        # Separate 'No Rain' from explicitly reported 0mm rainfall in df
-        explicit_no_rain_in_df = category_counts_from_df[category_counts_from_df['Category'] == 'No Rain']['Count'].sum()
-        
-        # Calculate the count for categories other than 'No Rain'
-        other_categories_counts = category_counts_from_df[category_counts_from_df['Category'] != 'No Rain']
-
-        # Create the final DataFrame for the bar chart
-        final_category_counts_for_bar = other_categories_counts.copy()
-
-        # Add the 'No Rain' category with the count derived from TOTAL_TALUKAS_GUJARAT
-        # This is the crucial part to make it consistent with the pie chart
-        no_rain_bar_count = talukas_without_rain # This already correctly includes missing talukas
-        
-        # Create a DataFrame for the 'No Rain' category with the adjusted count
-        no_rain_row_for_bar = pd.DataFrame([{'Category': 'No Rain', 'Count': no_rain_bar_count}])
-
-        # Concatenate and reorder for the bar chart
-        final_category_counts_for_bar = pd.concat([final_category_counts_for_bar, no_rain_row_for_bar], ignore_index=True)
-
-        final_category_counts_for_bar['Category'] = pd.Categorical(
-            final_category_counts_for_bar['Category'],
+        category_counts = df_map['Rainfall Category'].value_counts().reset_index()
+        category_counts.columns = ['Category', 'Count']
+        category_counts['Category'] = pd.Categorical(
+            category_counts['Category'],
             categories=ordered_categories,
             ordered=True
         )
-        final_category_counts_for_bar = final_category_counts_for_bar.sort_values('Category')
-        final_category_counts_for_bar['Rainfall Range'] = final_category_counts_for_bar['Category'].map(category_ranges)
+        category_counts = category_counts.sort_values('Category')
+        # Add Rainfall Range to category_counts for hover
+        category_counts['Rainfall Range'] = category_counts['Category'].map(category_ranges)
 
 
         fig_category_dist = px.bar(
-            final_category_counts_for_bar, # Use the corrected data for the bar chart
+            category_counts,
             x='Category',
             y='Count',
             title='Distribution of Talukas by Rainfall Category',
@@ -417,16 +396,14 @@ if taluka_geojson:
                 'Category': True, # Show Category in hover
                 'Rainfall Range': True, # Show Rainfall Range in hover
                 'Count': True # Show Count in hover
-            },
-            text='Count' # Add text labels to bars
+            }
         )
-        fig_category_dist.update_traces(textposition='outside') # Position text labels outside bars
         # Update x-axis tick labels to show only category names, no ranges
         fig_category_dist.update_layout(
             xaxis=dict(
                 tickmode='array',
-                tickvals=final_category_counts_for_bar['Category'],
-                ticktext=[cat for cat in final_category_counts_for_bar['Category']], # Only category name
+                tickvals=category_counts['Category'],
+                ticktext=[cat for cat in category_counts['Category']], # Only category name
                 tickangle=0 # Ensure horizontal display
             ),
             xaxis_title=None,
@@ -470,8 +447,7 @@ else:
 
 # --- Rainfall Trend by 2 hourly Time Interval (Line Chart) ---
 st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval")
-# Ensure multiselect options are from df's Taluka column
-selected_talukas = st.multiselect("Select Taluka(s)", sorted(df['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
+selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]

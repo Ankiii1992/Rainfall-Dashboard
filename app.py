@@ -217,7 +217,7 @@ time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
 existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
 
 slot_labels = {
-    "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10–12": "10–12 AM", # Corrected label
+    "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10TO12": "10–12 AM", # Corrected label
     "12TO14": "12–2 PM", "14TO16": "2–4 PM", "16TO18": "4–6 PM",
     "18TO20": "6–8 PM", "20TO22": "8–10 PM", "22TO24": "10–12 PM",
     "24TO02": "12–2 AM", "02TO04": "2–4 AM", "04TO06": "4–6 AM",

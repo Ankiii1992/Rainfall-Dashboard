@@ -316,27 +316,13 @@ if taluka_geojson:
     # Initialize a new Figure object from graph_objects
     fig = go.Figure()
 
-    # Create a custom colorscale for the choropleth map based on ordered categories
-    # Map categories to numerical indices (0, 1, 2, ...) for the z-value
-    # and create a colorscale that matches these numerical indices to your specific colors.
-    num_categories = len(ordered_categories)
-    discrete_colorscale = []
-    for i, category in enumerate(ordered_categories):
-        color = color_map[category]
-        # For each discrete category, map a small range around its index to the color
-        # This helps Plotly apply the color distinctly for categorical data
-        if num_categories > 1:
-            scale_point_low = i / (num_categories - 1)
-            scale_point_high = (i + 0.999) / (num_categories - 1)
-        else: # Handle case with only one category to avoid division by zero
-            scale_point_low = 0
-            scale_point_high = 1
-
-        discrete_colorscale.append([scale_point_low, color])
-        discrete_colorscale.append([scale_point_high, color])
-    
     # Prepare `z` values (numerical representation of categories) for the choropleth trace
+    # We map each category to its index in the ordered_categories list (0, 1, 2, ...)
     df_map['Category_Index'] = df_map['Rainfall Category'].apply(lambda x: ordered_categories.index(x))
+
+    # Create a list of colors directly from color_map in the `ordered_categories` sequence.
+    # This is the simplest and often correct way for discrete Z values (0, 1, ...) in go.Choroplethmapbox.
+    colors_for_mapbox = [color_map[cat] for cat in ordered_categories]
 
     # Add the Choroplethmapbox trace
     fig.add_trace(go.Choroplethmapbox(
@@ -344,10 +330,10 @@ if taluka_geojson:
         locations=df_map["Taluka"].tolist(),
         featureidkey="properties.SUB_DISTRICT",
         z=df_map["Category_Index"].tolist(), # Use the numerical index for coloring
-        colorscale=discrete_colorscale,      # Apply the custom discrete colorscale
+        colorscale=colors_for_mapbox,      # <--- Use the simplified list of colors here
         marker_opacity=0.75,
         marker_line_width=0,
-        customdata=df_map[["District", "Total_mm", "Rainfall Category"]].values.tolist(), # Add category to customdata
+        customdata=df_map[["District", "Total_mm", "Rainfall Category"]].values.tolist(),
         hovertemplate="<b>%{hover_name}</b><br>District: %{customdata[0]}<br>Total Rainfall: %{customdata[1]:.1f} mm<br>Category: %{customdata[2]}<extra></extra>",
         showscale=False # Important: Do NOT show the default color scale, we're making our own legend
     ))
@@ -356,10 +342,6 @@ if taluka_geojson:
     # This loop ensures that the legend entries are created in the specified `ordered_categories` sequence
     # and that their names include the range.
     for i, category in enumerate(ordered_categories):
-        # Only add a legend entry if the category actually exists in the data
-        # or if you want to show all categories regardless of data presence.
-        # For now, we'll always add it to ensure order.
-        
         color = color_map[category]
         range_text = category_ranges.get(category, '')
         
@@ -388,14 +370,13 @@ if taluka_geojson:
         legend=dict(
             orientation="h",       # Horizontal legend
             yanchor="top",         # Anchor legend from its top edge
-            y=-0.15,               # Position below the map (adjust this value if needed)
+            y=-0.15,               # Position below the map (adjust this value if needed, e.g., to -0.2 or -0.25)
             xanchor="center",      # Center horizontally
             x=0.5,                 # Center horizontally
             title_text="Rainfall Categories (mm)", # Legend title
             itemsizing='constant', # Ensure consistent item sizing
             font=dict(size=10),    # Adjust font size as needed
-            # Optional: control spacing between legend items
-            itemwidth=50 # Gives more space if ranges are long
+            itemwidth=50           # Optional: Gives more space for longer legend items
         )
     )
 

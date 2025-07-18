@@ -282,7 +282,7 @@ if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
     fig = px.line(
         plot_df,
-        x="2 hourly time interval",
+        x="Time Slot Label",
         y="Rainfall (mm)",
         color="Taluka",
         markers=True,

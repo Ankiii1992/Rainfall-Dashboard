@@ -136,7 +136,6 @@ ordered_categories = [
 @st.cache_data
 def load_all_sheet_tabs():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    # Ensure client_secrets.json is accessible or use st.secrets directly
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
@@ -147,7 +146,7 @@ def load_all_sheet_tabs():
     for tab in sheet_tabs:
         tab_name = tab.title
         data = tab.get_all_values()
-        if not data or len(data) < 2: # Ensure there's header and at least one row
+        if not data or len(data) < 2:
             continue
 
         df = pd.DataFrame(data[1:], columns=data[0])
@@ -171,8 +170,6 @@ def load_all_sheet_tabs():
 # --- Load GeoJSON (cached resource) ---
 @st.cache_resource
 def load_geojson(path):
-    # Adjust path if running in Streamlit Cloud and file is in the same repo
-    # Or ensure 'gujarat_taluka_clean.geojson' is deployed with your app
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
@@ -190,7 +187,7 @@ available_dates = sorted(
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
-df = data_by_date[selected_tab].copy() # Use .copy() to avoid SettingWithCopyWarning
+df = data_by_date[selected_tab].copy()
 df.columns = df.columns.str.strip()
 
 time_slot_columns = [col for col in df.columns if "TO" in col]
@@ -236,11 +233,9 @@ df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 
 # --- Metrics ---
 df['Total_mm'] = pd.to_numeric(df['Total_mm'], errors='coerce')
-# Ensure top_taluka_row and top_latest are safely accessed
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0] if not df['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
 df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
 top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
-
 num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
 more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
@@ -288,7 +283,7 @@ st.markdown("### 🗺️ Rainfall Distribution Overview")
 taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
 
 if taluka_geojson:
-    # Prepare df_map (this part uses the original df to get categories, as requested)
+    # Prepare df_map (using the original df to get categories as per the latest clarification)
     for feature in taluka_geojson["features"]:
         feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
 
@@ -378,26 +373,26 @@ if taluka_geojson:
         )
         category_counts = category_counts.sort_values('Category')
 
-        # Prepare new x-axis labels with ranges
+        # Prepare new x-axis labels with ranges on two lines
         category_labels_with_ranges = [
-            f"{cat} ({category_ranges[cat]})" for cat in category_counts['Category']
+            f"{cat}<br>({category_ranges[cat]})" for cat in category_counts['Category']
         ]
 
         fig_category_dist = px.bar(
             category_counts,
-            x='Category', # Use Category for internal sorting/mapping
+            x='Category',
             y='Count',
             title='Distribution of Talukas by Rainfall Category',
             labels={'Count': 'Number of Talukas'},
             color='Category',
             color_discrete_map=color_map
         )
-        # Update x-axis tick labels to include ranges
+        # Update x-axis tick labels to include ranges and make them multi-line
         fig_category_dist.update_layout(
             xaxis=dict(
                 tickmode='array',
-                tickvals=category_counts['Category'], # Use original categories for tickvals
-                ticktext=category_labels_with_ranges, # Use new labels with ranges
+                tickvals=category_counts['Category'],
+                ticktext=category_labels_with_ranges,
                 tickangle=-45 # Angle for better readability
             ),
             xaxis_title=None,
@@ -416,31 +411,26 @@ st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
 df_top_10 = df.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
 
 if not df_top_10.empty:
-    # Add Rainfall Category for coloring
-    df_top_10['Rainfall Category'] = df_top_10['Total_mm'].apply(classify_rainfall)
-
     fig_top_10 = px.bar(
         df_top_10,
         x='Taluka',
         y='Total_mm',
-        color='Rainfall Category', # Color by rainfall category
-        color_discrete_map=color_map, # Use the defined color map for consistent colors
+        color='Total_mm', # Reverted to color by rainfall amount
+        color_continuous_scale=px.colors.sequential.Bluyl, # Using a continuous scale
         labels={'Total_mm': 'Total Rainfall (mm)'},
         hover_data=['District'],
         text='Total_mm',
         title='Top 10 Talukas with Highest Total Rainfall'
     )
     fig_top_10.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-    fig_top_10.update_layout(xaxis_tickangle=-45, showlegend=True, margin=dict(t=50))
-    # Adjust legend for Top 10 chart if desired, e.g., to be horizontal
-    fig_top_10.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    fig_top_10.update_layout(xaxis_tickangle=-45, showlegend=False, margin=dict(t=50)) # Removed legend for continuous scale
     st.plotly_chart(fig_top_10, use_container_width=True)
 else:
     st.info("No rainfall data available to determine top 10 talukas.")
 
 
 # --- Rainfall Trend by 2 hourly Time Interval (Line Chart) ---
-st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval") # This header was already updated
+st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval")
 selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:

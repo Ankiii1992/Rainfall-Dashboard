@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go # Kept for Donut Chart, and potential future advanced Plotly needs
+import plotly.graph_objects as go
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
@@ -11,7 +11,7 @@ import os
 # --- Streamlit page settings ---
 st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
 
-# --- Enhanced CSS (Still apply this, assuming it works for general styling) ---
+# --- Enhanced CSS ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -136,6 +136,7 @@ ordered_categories = [
 @st.cache_data
 def load_all_sheet_tabs():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    # Ensure client_secrets.json is accessible or use st.secrets directly
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
@@ -146,7 +147,7 @@ def load_all_sheet_tabs():
     for tab in sheet_tabs:
         tab_name = tab.title
         data = tab.get_all_values()
-        if not data or len(data) < 2:
+        if not data or len(data) < 2: # Ensure there's header and at least one row
             continue
 
         df = pd.DataFrame(data[1:], columns=data[0])
@@ -170,6 +171,8 @@ def load_all_sheet_tabs():
 # --- Load GeoJSON (cached resource) ---
 @st.cache_resource
 def load_geojson(path):
+    # Adjust path if running in Streamlit Cloud and file is in the same repo
+    # Or ensure 'gujarat_taluka_clean.geojson' is deployed with your app
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
@@ -233,10 +236,12 @@ df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 
 # --- Metrics ---
 df['Total_mm'] = pd.to_numeric(df['Total_mm'], errors='coerce')
+# Ensure top_taluka_row and top_latest are safely accessed
 top_taluka_row = df.sort_values(by='Total_mm', ascending=False).iloc[0] if not df['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
 df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
 top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
-num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0] # Renamed for clarity in donut chart
+
+num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
 more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
 more_than_50 = df[df['Total_mm'] > 50].shape[0]
@@ -251,9 +256,9 @@ row2 = st.columns(3)
 last_slot_label = slot_labels[existing_order[-1]]
 
 row1_titles = [
-    ("Total Talukas with Rainfall", num_talukas_with_rain_today), # Updated to use the new variable name
-    ("Top Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"), # Added format
-    (f"Top Taluka in last 2 hour({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>") # Added format
+    ("Total Talukas with Rainfall", num_talukas_with_rain_today),
+    ("Top Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
+    (f"Top Taluka in last 2 hour({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
 ]
 
 row2_titles = [
@@ -274,8 +279,168 @@ for col, (label, value) in zip(row2, row2_titles):
         st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Chart Section ---
-st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval")
+
+# --- Reordered Chart Sections ---
+
+# --- Rainfall Distribution Overview (Map and Insights) ---
+st.markdown("### 🗺️ Rainfall Distribution Overview")
+
+taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
+
+if taluka_geojson:
+    # Prepare df_map (this part uses the original df to get categories, as requested)
+    for feature in taluka_geojson["features"]:
+        feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
+
+    df_map = df.copy()
+    df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
+    df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
+    df_map["Rainfall Category"] = pd.Categorical(
+        df_map["Rainfall Category"],
+        categories=ordered_categories,
+        ordered=True
+    )
+
+    # Create columns for the side-by-side layout (NOW 0.5, 0.5)
+    map_col, insights_col = st.columns([0.5, 0.5])
+
+    with map_col:
+        st.markdown("#### Gujarat Rainfall Map (by Taluka)")
+        fig_map = px.choropleth_mapbox(
+            df_map,
+            geojson=taluka_geojson,
+            featureidkey="properties.SUB_DISTRICT",
+            locations="Taluka",
+            color="Rainfall Category",
+            color_discrete_map=color_map,
+            mapbox_style="open-street-map",
+            center={"lat": 22.5, "lon": 71.5},
+            zoom=6,
+            opacity=0.75,
+            height=650,
+            hover_name="Taluka",
+            hover_data=["District", "Total_mm"],
+            title="Gujarat Rainfall Distribution by Taluka"
+        )
+
+        # Plotly Express map legend customization
+        fig_map.update_layout(
+            margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.15,
+                xanchor="center",
+                x=0.5,
+                title_text="Rainfall Categories (mm)",
+                font=dict(size=10),
+                itemsizing='constant',
+            )
+        )
+        st.plotly_chart(fig_map, use_container_width=True)
+
+    with insights_col:
+        st.markdown("#### Key Insights & Distributions")
+
+        # --- Donut Chart for Percentage of Talukas with Rainfall ---
+        TOTAL_TALUKAS_GUJARAT = 251 # Constant for total talukas
+        talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
+
+        donut_data = pd.DataFrame({
+            'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
+            'Count': [num_talukas_with_rain_today, talukas_without_rain]
+        })
+
+        fig_donut = px.pie(
+            donut_data,
+            values='Count',
+            names='Category',
+            title="Percentage of Talukas with Rainfall Today", # REMOVED (Total: 251)
+            hole=0.5,
+            color='Category',
+            color_discrete_map={
+                'Talukas with Rainfall': '#28a745', # Green
+                'Talukas without Rainfall': '#dc3545' # Red
+            }
+        )
+        fig_donut.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in donut_data['Category']])
+        fig_donut.update_layout(showlegend=False, height=300, margin=dict(l=0, r=0, t=50, b=0))
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+        # --- Distribution of Talukas by Rainfall Category (Bar Chart) ---
+        category_counts = df_map['Rainfall Category'].value_counts().reset_index()
+        category_counts.columns = ['Category', 'Count']
+        category_counts['Category'] = pd.Categorical(
+            category_counts['Category'],
+            categories=ordered_categories,
+            ordered=True
+        )
+        category_counts = category_counts.sort_values('Category')
+
+        # Prepare new x-axis labels with ranges
+        category_labels_with_ranges = [
+            f"{cat} ({category_ranges[cat]})" for cat in category_counts['Category']
+        ]
+
+        fig_category_dist = px.bar(
+            category_counts,
+            x='Category', # Use Category for internal sorting/mapping
+            y='Count',
+            title='Distribution of Talukas by Rainfall Category',
+            labels={'Count': 'Number of Talukas'},
+            color='Category',
+            color_discrete_map=color_map
+        )
+        # Update x-axis tick labels to include ranges
+        fig_category_dist.update_layout(
+            xaxis=dict(
+                tickmode='array',
+                tickvals=category_counts['Category'], # Use original categories for tickvals
+                ticktext=category_labels_with_ranges, # Use new labels with ranges
+                tickangle=-45 # Angle for better readability
+            ),
+            xaxis_title=None,
+            showlegend=False,
+            height=350,
+            margin=dict(l=0, r=0, t=50, b=0)
+        )
+        st.plotly_chart(fig_category_dist, use_container_width=True)
+
+
+else:
+    st.error("❌ GeoJSON file (gujarat_taluka_clean.geojson) not found. Please ensure it's in the same directory as your app.")
+
+# --- Top 10 Talukas by Total Rainfall (Bar Chart) ---
+st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
+df_top_10 = df.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
+
+if not df_top_10.empty:
+    # Add Rainfall Category for coloring
+    df_top_10['Rainfall Category'] = df_top_10['Total_mm'].apply(classify_rainfall)
+
+    fig_top_10 = px.bar(
+        df_top_10,
+        x='Taluka',
+        y='Total_mm',
+        color='Rainfall Category', # Color by rainfall category
+        color_discrete_map=color_map, # Use the defined color map for consistent colors
+        labels={'Total_mm': 'Total Rainfall (mm)'},
+        hover_data=['District'],
+        text='Total_mm',
+        title='Top 10 Talukas with Highest Total Rainfall'
+    )
+    fig_top_10.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+    fig_top_10.update_layout(xaxis_tickangle=-45, showlegend=True, margin=dict(t=50))
+    # Adjust legend for Top 10 chart if desired, e.g., to be horizontal
+    fig_top_10.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    st.plotly_chart(fig_top_10, use_container_width=True)
+else:
+    st.info("No rainfall data available to determine top 10 talukas.")
+
+
+# --- Rainfall Trend by 2 hourly Time Interval (Line Chart) ---
+st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval") # This header was already updated
 selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:
@@ -294,148 +459,8 @@ if selected_talukas:
     fig.update_layout(showlegend=True)
     fig.update_layout(modebar_remove=['toImage'])
     st.plotly_chart(fig, use_container_width=True)
-
-
-# --- NEW: Side-by-Side Layout for Map and Insights ---
-st.markdown("### 🗺️ Rainfall Distribution Overview")
-
-taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
-
-if taluka_geojson:
-    # Prepare df_map (this part is consistent with previous needs for choropleth)
-    for feature in taluka_geojson["features"]:
-        feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
-
-    df_map = df.copy()
-    df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
-    df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
-    df_map["Rainfall Category"] = pd.Categorical(
-        df_map["Rainfall Category"],
-        categories=ordered_categories,
-        ordered=True
-    )
-
-    # Create columns for the side-by-side layout
-    map_col, insights_col = st.columns([0.65, 0.35]) # Map takes 65% width, insights 35%
-
-    with map_col:
-        st.markdown("#### Gujarat Rainfall Map (by Taluka)")
-        # --- REVERTED TO PLOTLY.EXPRESS FOR MAP FOR ROBUSTNESS ---
-        fig_map = px.choropleth_mapbox(
-            df_map,
-            geojson=taluka_geojson,
-            featureidkey="properties.SUB_DISTRICT",
-            locations="Taluka",
-            color="Rainfall Category",
-            color_discrete_map=color_map, # Uses the `color_map` defined earlier
-            mapbox_style="open-street-map",
-            center={"lat": 22.5, "lon": 71.5},
-            zoom=6,
-            opacity=0.75,
-            height=650, # Adjusted height for side-by-side
-            hover_name="Taluka",
-            hover_data=["District", "Total_mm"],
-            title="Gujarat Rainfall Distribution by Taluka" # Title will be inside the column
-        )
-
-        # --- Plotly Express map legend customization ---
-        # This will try to display the legend horizontally with the correct order.
-        # PX generally doesn't allow adding custom text like ranges directly within its built-in legend items
-        # if the 'color' argument is already used for categories.
-        # So we display category names, but adding ranges next to them might be complex with px.
-        fig_map.update_layout(
-            margin={"r": 0, "t": 0, "l": 0, "b": 0},
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="top",
-                y=-0.15, # Position below the map
-                xanchor="center",
-                x=0.5,
-                title_text="Rainfall Categories (mm)",
-                font=dict(size=10),
-                itemsizing='constant',
-            )
-        )
-        st.plotly_chart(fig_map, use_container_width=True)
-
-    with insights_col:
-        st.markdown("#### Key Insights & Distributions")
-
-        # --- New: Donut Chart for Percentage of Talukas with Rainfall ---
-        TOTAL_TALUKAS_GUJARAT = 251 # Constant for total talukas
-        talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
-
-        donut_data = pd.DataFrame({
-            'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
-            'Count': [num_talukas_with_rain_today, talukas_without_rain]
-        })
-
-        fig_donut = px.pie(
-            donut_data,
-            values='Count',
-            names='Category',
-            title=f"Percentage of Talukas with Rainfall Today (Total: {TOTAL_TALUKAS_GUJARAT})",
-            hole=0.5, # Makes it a donut chart
-            color='Category',
-            color_discrete_map={
-                'Talukas with Rainfall': '#28a745', # Green
-                'Talukas without Rainfall': '#dc3545' # Red
-            }
-        )
-        # Update textinfo to show percentage and label, optional pull for emphasis
-        fig_donut.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in donut_data['Category']])
-        fig_donut.update_layout(showlegend=False, height=300, margin=dict(l=0, r=0, t=50, b=0)) # Adjusted height for column
-        st.plotly_chart(fig_donut, use_container_width=True)
-
-        # --- New: Distribution of Talukas by Rainfall Category (Bar Chart) ---
-        category_counts = df_map['Rainfall Category'].value_counts().reset_index()
-        category_counts.columns = ['Category', 'Count']
-        category_counts['Category'] = pd.Categorical(
-            category_counts['Category'],
-            categories=ordered_categories,
-            ordered=True
-        )
-        category_counts = category_counts.sort_values('Category') # Ensure correct order on chart
-
-        fig_category_dist = px.bar(
-            category_counts,
-            x='Category',
-            y='Count',
-            title='Distribution of Talukas by Rainfall Category',
-            labels={'Count': 'Number of Talukas'},
-            color='Category', # Use color to map to categories
-            color_discrete_map=color_map # Use the global color_map for consistent colors
-        )
-        fig_category_dist.update_layout(xaxis_title=None, showlegend=False, height=350, margin=dict(l=0, r=0, t=50, b=0)) # Adjusted height, removed x-axis title, hide legend
-        st.plotly_chart(fig_category_dist, use_container_width=True)
-
-
 else:
-    st.error("❌ GeoJSON file (gujarat_taluka_clean.geojson) not found. Please ensure it's in the same directory as your app.")
-
-# --- NEW: Top 10 Talukas by Total Rainfall (Bar Chart) ---
-st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
-# Ensure 'Total_mm' is numeric and handle NaNs for sorting
-df_top_10 = df.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
-
-if not df_top_10.empty:
-    fig_top_10 = px.bar(
-        df_top_10,
-        x='Taluka',
-        y='Total_mm',
-        color='Total_mm', # Color by rainfall amount
-        color_continuous_scale=px.colors.sequential.Bluyl, # A nice blue/purple scale
-        labels={'Total_mm': 'Total Rainfall (mm)'},
-        hover_data=['District'],
-        text='Total_mm', # Show value on bars
-        title='Top 10 Talukas with Highest Total Rainfall'
-    )
-    fig_top_10.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-    fig_top_10.update_layout(xaxis_tickangle=-45, showlegend=False, margin=dict(t=50))
-    st.plotly_chart(fig_top_10, use_container_width=True)
-else:
-    st.info("No rainfall data available to determine top 10 talukas.")
+    st.info("Please select at least one Taluka to view the rainfall trend.")
 
 
 # --- Table Section ---

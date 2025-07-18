@@ -295,7 +295,7 @@ if taluka_geojson:
         categories=ordered_categories,
         ordered=True
     )
-    # Add rainfall range to df_map for hover text (only for the bar chart now)
+    # Add rainfall range to df_map for hover text
     df_map["Rainfall Range"] = df_map["Rainfall Category"].map(category_ranges)
 
 
@@ -320,8 +320,8 @@ if taluka_geojson:
             hover_data={
                 "District": True,
                 "Total_mm": ":.1f mm", # Format Total_mm in hover
-                "Rainfall Category": False, # DO NOT show Rainfall Category in map hover
-                "Rainfall Range": False # DO NOT show Rainfall Range in map hover
+                "Rainfall Category": True,
+                "Rainfall Range": True # Display Rainfall Range in hover
             },
             title="Gujarat Rainfall Distribution by Taluka"
         )
@@ -359,7 +359,7 @@ if taluka_geojson:
             donut_data,
             values='Count',
             names='Category',
-            title="Percentage of Talukas with Rainfall Today",
+            title="Percentage of Talukas with Rainfall Today", # REMOVED (Total: 251)
             hole=0.5,
             color='Category',
             color_discrete_map={
@@ -380,9 +380,6 @@ if taluka_geojson:
             ordered=True
         )
         category_counts = category_counts.sort_values('Category')
-        # Add Rainfall Range to category_counts for hover
-        category_counts['Rainfall Range'] = category_counts['Category'].map(category_ranges)
-
 
         fig_category_dist = px.bar(
             category_counts,
@@ -391,12 +388,7 @@ if taluka_geojson:
             title='Distribution of Talukas by Rainfall Category',
             labels={'Count': 'Number of Talukas'},
             color='Category',
-            color_discrete_map=color_map,
-            hover_data={
-                'Category': True, # Show Category in hover
-                'Rainfall Range': True, # Show Rainfall Range in hover
-                'Count': True # Show Count in hover
-            }
+            color_discrete_map=color_map
         )
         # Update x-axis tick labels to show only category names, no ranges
         fig_category_dist.update_layout(

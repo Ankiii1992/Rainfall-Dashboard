@@ -82,15 +82,15 @@ st.markdown("""
 
 # --- Rainfall Category & Color Mapping (for Plotly map) ---
 color_map = {
-    "No Rain": "#f0f0f0",
-    "Very Light": "#c8e6c9",
+    "No Rain": "#f8f8f8",
+    "Very Light": "#e0ffe0",
     "Light": "#00ff01",
-    "Moderate": "#ffff00",
-    "Rather Heavy": "#ffa500",
-    "Heavy": "#d61a1c",
-    "Very Heavy": "#3b0030",
-    "Extremely Heavy": "#4c0073",
-    "Exceptional": "#ffdbff"
+    "Moderate": "#00ffff",
+    "Rather Heavy": "#ffeb3b",
+    "Heavy": "#ff8c00",
+    "Very Heavy": "#d50000",
+    "Extremely Heavy": "#4e0000",
+    "Exceptional": "#a23baa"
 }
 
 category_ranges = {

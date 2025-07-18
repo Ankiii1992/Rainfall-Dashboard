@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go # <--- IMPORTANT: Added this import for Gauge/Donut charts and flexible map control
+import plotly.graph_objects as go # Kept for Donut Chart, and potential future advanced Plotly needs
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
@@ -42,7 +42,7 @@ st.markdown("""
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -315,89 +315,46 @@ if taluka_geojson:
         ordered=True
     )
 
-    # --- Prepare `z` values (numerical representation of categories) for the choropleth trace
-    # This is crucial for correctly mapping discrete colors with go.Choroplethmapbox
-    df_map['Category_Index'] = df_map['Rainfall Category'].apply(lambda x: ordered_categories.index(x))
-
-    # --- Refined discrete_colorscale construction for go.Choroplethmapbox ---
-    # This format explicitly maps each integer index to a specific color
-    num_categories = len(ordered_categories)
-    discrete_colorscale = []
-
-    if num_categories > 0:
-        for i, category in enumerate(ordered_categories):
-            color = color_map[category]
-            
-            # Calculate the normalized value for this category's index (0 to num_categories-1)
-            normalized_val = i / (num_categories - 1) if num_categories > 1 else 0.0
-
-            # Add two points to define a sharp color band for each category:
-            # One at the start of the category's normalized range, and one just before the next category's.
-            discrete_colorscale.append([normalized_val, color])
-            if i < num_categories - 1:
-                next_normalized_val = (i + 1) / (num_categories - 1) if num_categories > 1 else 1.0
-                discrete_colorscale.append([next_normalized_val - 1e-6, color]) # A tiny epsilon before next
-            
-        if num_categories > 0:
-            last_color = color_map[ordered_categories[-1]]
-            discrete_colorscale.append([1.0, last_color])
-            
-        discrete_colorscale.sort(key=lambda x: x[0])
-
-
     # Create columns for the side-by-side layout
     map_col, insights_col = st.columns([0.65, 0.35]) # Map takes 65% width, insights 35%
 
     with map_col:
         st.markdown("#### Gujarat Rainfall Map (by Taluka)")
-        # Add the Choroplethmapbox trace using go.Figure and go.Choroplethmapbox
-        fig_map = go.Figure()
-        fig_map.add_trace(go.Choroplethmapbox(
+        # --- REVERTED TO PLOTLY.EXPRESS FOR MAP FOR ROBUSTNESS ---
+        fig_map = px.choropleth_mapbox(
+            df_map,
             geojson=taluka_geojson,
-            locations=df_map["Taluka"].tolist(),
             featureidkey="properties.SUB_DISTRICT",
-            z=df_map["Category_Index"].tolist(), # Use the numerical index for coloring
-            colorscale=discrete_colorscale,      # Apply the carefully constructed colorscale
-            marker_opacity=0.75,
-            marker_line_width=0,
-            customdata=df_map[["District", "Total_mm", "Rainfall Category"]].values.tolist(),
-            hovertemplate="<b>%{hover_name}</b><br>District: %{customdata[0]}<br>Total Rainfall: %{customdata[1]:.1f} mm<br>Category: %{customdata[2]}<extra></extra>",
-            showscale=False # Important: Do NOT show the default color scale, we're making our own legend
-        ))
-
-        # Add invisible scatter traces for the custom legend entries (crucial for legend text and order)
-        for i, category in enumerate(ordered_categories):
-            color = color_map[category]
-            range_text = category_ranges.get(category, '')
-            legend_label = f"{category} ({range_text})" if range_text else category
-
-            fig_map.add_trace(go.Scatter(
-                x=[None], y=[None],
-                mode='markers',
-                marker=dict(size=10, color=color, symbol='square'),
-                name=legend_label,
-                showlegend=True,
-                legendgroup='categories',
-                legendrank=i
-            ))
-
-        # Update map layout
-        fig_map.update_layout(
+            locations="Taluka",
+            color="Rainfall Category",
+            color_discrete_map=color_map, # Uses the `color_map` defined earlier
             mapbox_style="open-street-map",
-            mapbox_zoom=6,
-            mapbox_center={"lat": 22.5, "lon": 71.5},
+            center={"lat": 22.5, "lon": 71.5},
+            zoom=6,
+            opacity=0.75,
+            height=650, # Adjusted height for side-by-side
+            hover_name="Taluka",
+            hover_data=["District", "Total_mm"],
+            title="Gujarat Rainfall Distribution by Taluka" # Title will be inside the column
+        )
+
+        # --- Plotly Express map legend customization ---
+        # This will try to display the legend horizontally with the correct order.
+        # PX generally doesn't allow adding custom text like ranges directly within its built-in legend items
+        # if the 'color' argument is already used for categories.
+        # So we display category names, but adding ranges next to them might be complex with px.
+        fig_map.update_layout(
             margin={"r": 0, "t": 0, "l": 0, "b": 0},
             showlegend=True,
             legend=dict(
                 orientation="h",
                 yanchor="top",
-                y=-0.15,
+                y=-0.15, # Position below the map
                 xanchor="center",
                 x=0.5,
                 title_text="Rainfall Categories (mm)",
-                itemsizing='constant',
                 font=dict(size=10),
-                itemwidth=50
+                itemsizing='constant',
             )
         )
         st.plotly_chart(fig_map, use_container_width=True)
@@ -426,8 +383,9 @@ if taluka_geojson:
                 'Talukas without Rainfall': '#dc3545' # Red
             }
         )
-        fig_donut.update_traces(textinfo='percent+label', pull=[0.05, 0]) # Pull 'with rainfall' slice slightly
-        fig_donut.update_layout(showlegend=False, height=350, margin=dict(l=0, r=0, t=50, b=0))
+        # Update textinfo to show percentage and label, optional pull for emphasis
+        fig_donut.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in donut_data['Category']])
+        fig_donut.update_layout(showlegend=False, height=300, margin=dict(l=0, r=0, t=50, b=0)) # Adjusted height for column
         st.plotly_chart(fig_donut, use_container_width=True)
 
         # --- New: Distribution of Talukas by Rainfall Category (Bar Chart) ---
@@ -440,9 +398,6 @@ if taluka_geojson:
         )
         category_counts = category_counts.sort_values('Category') # Ensure correct order on chart
 
-        # Map colors to categories for the bar chart
-        bar_colors = [color_map[cat] for cat in category_counts['Category']]
-
         fig_category_dist = px.bar(
             category_counts,
             x='Category',
@@ -452,7 +407,7 @@ if taluka_geojson:
             color='Category', # Use color to map to categories
             color_discrete_map=color_map # Use the global color_map for consistent colors
         )
-        fig_category_dist.update_layout(xaxis_title=None, showlegend=False, height=350, margin=dict(l=0, r=0, t=50, b=0)) # Remove x-axis title, hide legend
+        fig_category_dist.update_layout(xaxis_title=None, showlegend=False, height=350, margin=dict(l=0, r=0, t=50, b=0)) # Adjusted height, removed x-axis title, hide legend
         st.plotly_chart(fig_category_dist, use_container_width=True)
 
 

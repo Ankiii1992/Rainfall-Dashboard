@@ -295,6 +295,9 @@ if taluka_geojson:
         categories=ordered_categories,
         ordered=True
     )
+    # Add rainfall range to df_map for hover text
+    df_map["Rainfall Range"] = df_map["Rainfall Category"].map(category_ranges)
+
 
     # Create columns for the side-by-side layout (NOW 0.5, 0.5)
     map_col, insights_col = st.columns([0.5, 0.5])
@@ -314,7 +317,12 @@ if taluka_geojson:
             opacity=0.75,
             height=650,
             hover_name="Taluka",
-            hover_data=["District", "Total_mm"],
+            hover_data={
+                "District": True,
+                "Total_mm": ":.1f mm", # Format Total_mm in hover
+                "Rainfall Category": True,
+                "Rainfall Range": True # Display Rainfall Range in hover
+            },
             title="Gujarat Rainfall Distribution by Taluka"
         )
 
@@ -373,11 +381,6 @@ if taluka_geojson:
         )
         category_counts = category_counts.sort_values('Category')
 
-        # Prepare new x-axis labels with ranges on two lines
-        category_labels_with_ranges = [
-            f"{cat}<br>({category_ranges[cat]})" for cat in category_counts['Category']
-        ]
-
         fig_category_dist = px.bar(
             category_counts,
             x='Category',
@@ -387,13 +390,13 @@ if taluka_geojson:
             color='Category',
             color_discrete_map=color_map
         )
-        # Update x-axis tick labels to include ranges and make them multi-line
+        # Update x-axis tick labels to show only category names, no ranges
         fig_category_dist.update_layout(
             xaxis=dict(
                 tickmode='array',
                 tickvals=category_counts['Category'],
-                ticktext=category_labels_with_ranges,
-                tickangle=-45 # Angle for better readability
+                ticktext=[cat for cat in category_counts['Category']], # Only category name
+                tickangle=0 # Ensure horizontal display
             ),
             xaxis_title=None,
             showlegend=False,
@@ -423,7 +426,12 @@ if not df_top_10.empty:
         title='Top 10 Talukas with Highest Total Rainfall'
     )
     fig_top_10.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-    fig_top_10.update_layout(xaxis_tickangle=-45, showlegend=False, margin=dict(t=50)) # Removed legend for continuous scale
+    fig_top_10.update_layout(
+        xaxis_tickangle=-45,
+        showlegend=False, # Ensure no discrete legend
+        margin=dict(t=50),
+        coloraxis_showscale=False # HIDE THE CONTINUOUS COLOR BAR LEGEND
+    )
     st.plotly_chart(fig_top_10, use_container_width=True)
 else:
     st.info("No rainfall data available to determine top 10 talukas.")

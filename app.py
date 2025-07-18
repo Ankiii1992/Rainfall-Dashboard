@@ -42,7 +42,7 @@ st.markdown("""
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -295,7 +295,7 @@ if taluka_geojson:
         categories=ordered_categories,
         ordered=True
     )
-    # Add rainfall range to df_map for hover text
+    # Add rainfall range to df_map for hover text (only for the bar chart now)
     df_map["Rainfall Range"] = df_map["Rainfall Category"].map(category_ranges)
 
 
@@ -320,8 +320,8 @@ if taluka_geojson:
             hover_data={
                 "District": True,
                 "Total_mm": ":.1f mm", # Format Total_mm in hover
-                "Rainfall Category": True,
-                "Rainfall Range": True # Display Rainfall Range in hover
+                "Rainfall Category": False, # DO NOT show Rainfall Category in map hover
+                "Rainfall Range": False # DO NOT show Rainfall Range in map hover
             },
             title="Gujarat Rainfall Distribution by Taluka"
         )
@@ -346,30 +346,30 @@ if taluka_geojson:
     with insights_col:
         st.markdown("#### Key Insights & Distributions")
 
-        # --- Donut Chart for Percentage of Talukas with Rainfall ---
+        # --- Pie Chart for Percentage of Talukas with Rainfall ---
         TOTAL_TALUKAS_GUJARAT = 251 # Constant for total talukas
         talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
 
-        donut_data = pd.DataFrame({
+        pie_data = pd.DataFrame({
             'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
             'Count': [num_talukas_with_rain_today, talukas_without_rain]
         })
 
-        fig_donut = px.pie(
-            donut_data,
+        fig_pie = px.pie(
+            pie_data,
             values='Count',
             names='Category',
-            title="Percentage of Talukas with Rainfall Today", # REMOVED (Total: 251)
-            hole=0.5,
+            title="Percentage of Talukas with Rainfall Today",
+            # Removed hole=0.5 for a standard pie chart
             color='Category',
             color_discrete_map={
                 'Talukas with Rainfall': '#28a745', # Green
                 'Talukas without Rainfall': '#dc3545' # Red
             }
         )
-        fig_donut.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in donut_data['Category']])
-        fig_donut.update_layout(showlegend=False, height=300, margin=dict(l=0, r=0, t=50, b=0))
-        st.plotly_chart(fig_donut, use_container_width=True)
+        fig_pie.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in pie_data['Category']])
+        fig_pie.update_layout(showlegend=False, height=300, margin=dict(l=0, r=0, t=50, b=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
 
         # --- Distribution of Talukas by Rainfall Category (Bar Chart) ---
         category_counts = df_map['Rainfall Category'].value_counts().reset_index()
@@ -380,6 +380,9 @@ if taluka_geojson:
             ordered=True
         )
         category_counts = category_counts.sort_values('Category')
+        # Add Rainfall Range to category_counts for hover
+        category_counts['Rainfall Range'] = category_counts['Category'].map(category_ranges)
+
 
         fig_category_dist = px.bar(
             category_counts,
@@ -388,7 +391,12 @@ if taluka_geojson:
             title='Distribution of Talukas by Rainfall Category',
             labels={'Count': 'Number of Talukas'},
             color='Category',
-            color_discrete_map=color_map
+            color_discrete_map=color_map,
+            hover_data={
+                'Category': True, # Show Category in hover
+                'Rainfall Range': True, # Show Rainfall Range in hover
+                'Count': True # Show Count in hover
+            }
         )
         # Update x-axis tick labels to show only category names, no ranges
         fig_category_dist.update_layout(

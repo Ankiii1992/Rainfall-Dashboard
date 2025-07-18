@@ -186,7 +186,7 @@ available_dates = sorted(
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
-df = data_by_date[selected_tab].copy()
+df = data_by_date[selected_tab].copy() # Use .copy() to avoid SettingWithCopyWarning
 df.columns = df.columns.str.strip()
 
 time_slot_columns = [col for col in df.columns if "TO" in col]
@@ -332,29 +332,33 @@ if taluka_geojson:
     # --- PLOTLY LAYOUT CONFIGURATION FOR HORIZONTAL BOTTOM LEGEND WITH RANGES ---
     fig.update_layout(
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        # Remove default legend if present (px often adds one)
-        showlegend=False,
-        # Configure the color axis and its color bar (legend)
-        coloraxis=dict(
-            colorbar=dict(
-                title="Rainfall (mm)",
-                orientation="h",       # Horizontal orientation
-                thickness=20,          # Thickness of the color bar
-                len=0.7,               # Length of the color bar (70% of plot width)
-                x=0.5,                 # Center horizontally (0 to 1, where 0 is left, 1 is right)
-                xanchor="center",      # Anchor point for x (center means x=0.5 will center it)
-                y=-0.15,               # Position below the map area (adjust this value as needed, negative values move it down relative to plot bottom)
-                yanchor="top",         # Anchor point for y (top means the top edge of the color bar is at y)
-                # Set tick values to map to the indices of your ordered categories
-                tickmode='array',
-                tickvals=[i for i in range(len(ordered_categories))],
-                # Set tick text to display category name and range
-                ticktext=[f"{cat}<br>({category_ranges.get(cat, '')})" for cat in ordered_categories],
-                # If you want to customize font size for readability
-                tickfont=dict(size=10) # Adjust font size as needed
-            )
+        # **Crucially, turn OFF the default color axis legend**
+        coloraxis_showscale=False, # This hides the vertical color bar if it's still appearing
+        
+        # **Explicitly define a standard legend for categories**
+        showlegend=True, # Ensure main legend is shown
+        legend=dict(
+            orientation="h",       # Horizontal legend
+            yanchor="top",         # Anchor legend from its top edge
+            y=-0.15,               # Position below the map (adjust as needed if it overlaps)
+            xanchor="center",      # Center horizontally
+            x=0.5,                 # Center horizontally
+            # Optional: Add title to the legend if desired
+            title_text="Rainfall Categories (mm)",
+            itemsizing='constant', # Ensure legend items are consistent size
+            font=dict(size=10)     # Adjust font size as needed
         )
     )
+
+    # **Modify traces to include custom legend group names with ranges**
+    # This is often necessary for discrete legends to display custom text
+    for i, category in enumerate(ordered_categories):
+        # Find traces corresponding to this category
+        for trace in fig.data:
+            if 'hovertemplate' in trace and f"color: {category}" in trace.hovertemplate:
+                trace.name = f"{category} ({category_ranges.get(category, '')})"
+                trace.showlegend = True # Ensure this trace shows in the legend
+
     st.plotly_chart(fig, use_container_width=True)
 
 else:

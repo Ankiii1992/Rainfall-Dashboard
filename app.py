@@ -89,8 +89,8 @@ color_map = {
     "Rather Heavy": "#ffeb3b",
     "Heavy": "#ff8c00",
     "Very Heavy": "#d50000",
-    "Extremely Heavy": "#4e0000",
-    "Exceptional": "#a23baa"
+    "Extremely Heavy": "#a23baa",
+    "Exceptional": "#e8aaf5"
 }
 
 category_ranges = {

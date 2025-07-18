@@ -241,7 +241,7 @@ more_than_150 = df[df['Total_mm'] > 150].shape[0]
 more_than_100 = df[df['Total_mm'] > 100].shape[0]
 more_than_50 = df[df['Total_mm'] > 50].shape[0]
 
-st.markdown(f"#### 📊 Latest data available for time slot: **{slot_labels[existing_order[-1]]}**")
+st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
 
 # --- Metric Tiles ---
 st.markdown("### Overview")
@@ -252,8 +252,8 @@ last_slot_label = slot_labels[existing_order[-1]]
 
 row1_titles = [
     ("Total Talukas with Rainfall", num_talukas_with_rain_today), # Updated to use the new variable name
-    ("Highest Rainfall Total", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"), # Added format
-    (f"Highest Rainfall in Last 2 Hours ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>") # Added format
+    ("Top Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"), # Added format
+    (f"Top Taluka in last 2 hour({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>") # Added format
 ]
 
 row2_titles = [
@@ -275,14 +275,14 @@ for col, (label, value) in zip(row2, row2_titles):
         st.markdown("</div>", unsafe_allow_html=True)
 
 # --- Chart Section ---
-st.markdown("### 📈 Rainfall Trend by Time Slot")
+st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval")
 selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']])
 
 if selected_talukas:
     plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
     fig = px.line(
         plot_df,
-        x="Time Slot Label",
+        x="2 hourly time interval",
         y="Rainfall (mm)",
         color="Taluka",
         markers=True,

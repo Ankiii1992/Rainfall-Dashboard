@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go # Import plotly.graph_objects for fine control
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
@@ -125,7 +126,7 @@ def classify_rainfall(rainfall):
     else:
         return "Exceptional"
 
-# Ensure the order of categories for the Plotly color scale
+# Ensure the order of categories for the Plotly color scale and legend
 ordered_categories = [
     "No Rain", "Very Light", "Light", "Moderate", "Rather Heavy",
     "Heavy", "Very Heavy", "Extremely Heavy", "Exceptional"
@@ -186,7 +187,7 @@ available_dates = sorted(
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 selected_tab = st.selectbox("🗕️ Select Date", available_dates, index=0)
-df = data_by_date[selected_tab].copy() # Use .copy() to avoid SettingWithCopyWarning
+df = data_by_date[selected_tab].copy()
 df.columns = df.columns.str.strip()
 
 time_slot_columns = [col for col in df.columns if "TO" in col]
@@ -308,56 +309,95 @@ if taluka_geojson:
     df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
     df_map["Rainfall Category"] = pd.Categorical(
         df_map["Rainfall Category"],
-        categories=ordered_categories,
+        categories=ordered_categories, # Ensure the DataFrame's category column also follows the order
         ordered=True
     )
 
-    fig = px.choropleth_mapbox(
-        df_map,
-        geojson=taluka_geojson,
-        featureidkey="properties.SUB_DISTRICT",
-        locations="Taluka",
-        color="Rainfall Category",
-        color_discrete_map=color_map, # Uses the `color_map` defined earlier
-        mapbox_style="open-street-map",
-        center={"lat": 22.5, "lon": 71.5},
-        zoom=6,
-        opacity=0.75,
-        height=650,
-        hover_name="Taluka",
-        hover_data=["District", "Total_mm"],
-        title="Gujarat Rainfall Distribution by Taluka"
-    )
+    # Initialize a new Figure object from graph_objects
+    fig = go.Figure()
 
-    # --- PLOTLY LAYOUT CONFIGURATION FOR HORIZONTAL BOTTOM LEGEND WITH RANGES ---
-    fig.update_layout(
-        margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        # **Crucially, turn OFF the default color axis legend**
-        coloraxis_showscale=False, # This hides the vertical color bar if it's still appearing
+    # Create a custom colorscale for the choropleth map based on ordered categories
+    # Map categories to numerical indices (0, 1, 2, ...) for the z-value
+    # and create a colorscale that matches these numerical indices to your specific colors.
+    num_categories = len(ordered_categories)
+    discrete_colorscale = []
+    for i, category in enumerate(ordered_categories):
+        color = color_map[category]
+        # For each discrete category, map a small range around its index to the color
+        # This helps Plotly apply the color distinctly for categorical data
+        if num_categories > 1:
+            scale_point_low = i / (num_categories - 1)
+            scale_point_high = (i + 0.999) / (num_categories - 1)
+        else: # Handle case with only one category to avoid division by zero
+            scale_point_low = 0
+            scale_point_high = 1
+
+        discrete_colorscale.append([scale_point_low, color])
+        discrete_colorscale.append([scale_point_high, color])
+    
+    # Prepare `z` values (numerical representation of categories) for the choropleth trace
+    df_map['Category_Index'] = df_map['Rainfall Category'].apply(lambda x: ordered_categories.index(x))
+
+    # Add the Choroplethmapbox trace
+    fig.add_trace(go.Choroplethmapbox(
+        geojson=taluka_geojson,
+        locations=df_map["Taluka"].tolist(),
+        featureidkey="properties.SUB_DISTRICT",
+        z=df_map["Category_Index"].tolist(), # Use the numerical index for coloring
+        colorscale=discrete_colorscale,      # Apply the custom discrete colorscale
+        marker_opacity=0.75,
+        marker_line_width=0,
+        customdata=df_map[["District", "Total_mm", "Rainfall Category"]].values.tolist(), # Add category to customdata
+        hovertemplate="<b>%{hover_name}</b><br>District: %{customdata[0]}<br>Total Rainfall: %{customdata[1]:.1f} mm<br>Category: %{customdata[2]}<extra></extra>",
+        showscale=False # Important: Do NOT show the default color scale, we're making our own legend
+    ))
+
+    # Add invisible scatter traces for the custom legend entries
+    # This loop ensures that the legend entries are created in the specified `ordered_categories` sequence
+    # and that their names include the range.
+    for i, category in enumerate(ordered_categories):
+        # Only add a legend entry if the category actually exists in the data
+        # or if you want to show all categories regardless of data presence.
+        # For now, we'll always add it to ensure order.
         
-        # **Explicitly define a standard legend for categories**
-        showlegend=True, # Ensure main legend is shown
+        color = color_map[category]
+        range_text = category_ranges.get(category, '')
+        
+        # Format the legend label: "Category Name (Range)"
+        legend_label = f"{category} ({range_text})" if range_text else category
+
+        fig.add_trace(go.Scatter(
+            x=[None], # No actual data points to plot
+            y=[None],
+            mode='markers',
+            marker=dict(size=10, color=color, symbol='square'), # Square marker for the legend item
+            name=legend_label,
+            showlegend=True,
+            legendgroup='categories', # Group all these dummy traces in one legend
+            legendrank=i # Crucially, this ensures the correct order in the legend
+        ))
+
+    # Update map layout
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        mapbox_zoom=6,
+        mapbox_center={"lat": 22.5, "lon": 71.5},
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        # Configure the main legend for bottom, horizontal placement
+        showlegend=True, # Explicitly enable the legend
         legend=dict(
             orientation="h",       # Horizontal legend
             yanchor="top",         # Anchor legend from its top edge
-            y=-0.15,               # Position below the map (adjust as needed if it overlaps)
+            y=-0.15,               # Position below the map (adjust this value if needed)
             xanchor="center",      # Center horizontally
             x=0.5,                 # Center horizontally
-            # Optional: Add title to the legend if desired
-            title_text="Rainfall Categories (mm)",
-            itemsizing='constant', # Ensure legend items are consistent size
-            font=dict(size=10)     # Adjust font size as needed
+            title_text="Rainfall Categories (mm)", # Legend title
+            itemsizing='constant', # Ensure consistent item sizing
+            font=dict(size=10),    # Adjust font size as needed
+            # Optional: control spacing between legend items
+            itemwidth=50 # Gives more space if ranges are long
         )
     )
-
-    # **Modify traces to include custom legend group names with ranges**
-    # This is often necessary for discrete legends to display custom text
-    for i, category in enumerate(ordered_categories):
-        # Find traces corresponding to this category
-        for trace in fig.data:
-            if 'hovertemplate' in trace and f"color: {category}" in trace.hovertemplate:
-                trace.name = f"{category} ({category_ranges.get(category, '')})"
-                trace.showlegend = True # Ensure this trace shows in the legend
 
     st.plotly_chart(fig, use_container_width=True)
 

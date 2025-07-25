@@ -16,8 +16,10 @@ def get_gsheet_client():
     return gspread.authorize(creds)
 
 @st.cache_resource # Cache the GeoJSON loading
+@st.cache_resource
 def load_geojson(path):
-    import json # Import json here to keep load_geojson self-contained
+    import os  # <--- ADD THIS LINE HERE
+    import json # This was already there, good!
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)

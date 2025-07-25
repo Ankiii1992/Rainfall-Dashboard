@@ -6,7 +6,6 @@ from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime, timedelta
 import geopandas as gpd
-import plotly.graph_objects as go
 
 # ---------------------------- CONFIG ----------------------------
 @st.cache_resource
@@ -55,17 +54,19 @@ def generate_title_from_date(selected_date):
     end_date = selected_date.strftime("%d-%m-%Y")
     return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
 
-# ---------------------------- LOAD DATA ----------------------------
-def load_worksheet_df(sheet_name, worksheet_name):
-    client = get_gsheet_client()
-    sheet = client.open(sheet_name).worksheet(worksheet_name)
-    df = pd.DataFrame(sheet.get_all_records())
-    return df
+def load_sheet_data(folder_name, year, month, sheet_name, tab_name):
+    try:
+        client = get_gsheet_client()
+        sheet = client.open(sheet_name).worksheet(tab_name)
+        df = pd.DataFrame(sheet.get_all_records())
+        return df
+    except Exception as e:
+        st.error(f"❌ Failed to load sheet '{sheet_name}' or tab '{tab_name}': {e}")
+        return pd.DataFrame()
 
-# ---------------------------- CHOROPLETH ----------------------------
-def plot_choropleth(df, geojson_path, value_col):
+def plot_choropleth(df, geojson_path):
     gdf = gpd.read_file(geojson_path)
-    df["Rainfall_Category"] = df[value_col].apply(classify_rainfall)
+    df["Rainfall_Category"] = df["Rain_Last_24_Hrs"].apply(classify_rainfall)
 
     fig = px.choropleth_mapbox(
         df,
@@ -78,70 +79,62 @@ def plot_choropleth(df, geojson_path, value_col):
         center={"lat": 22.3, "lon": 71.7},
         opacity=0.7,
         hover_name="Taluka",
-        hover_data={value_col: True, "District": True}
+        hover_data={"Rain_Last_24_Hrs": True, "District": True}
     )
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
     return fig
 
-# ---------------------------- STREAMLIT UI ----------------------------
-st.title("Gujarat Rainfall Dashboard")
-
-rainfall_type = st.selectbox("Select Rainfall Type", ["2 Hourly", "24 Hourly"])
-
-selected_date = st.date_input("Select Date", datetime.today())
-
-if rainfall_type == "24 Hourly":
+def show_24_hourly_dashboard(df, selected_date):
+    df["Rain_Last_24_Hrs"] = pd.to_numeric(df["Rain_Last_24_Hrs"], errors='coerce')
     title = generate_title_from_date(selected_date)
     st.subheader(title)
 
-    sheet_name = f"24HR_Rainfall_{selected_date.strftime('%B_%Y')}"
-    worksheet_name = selected_date.strftime("%d-%m-%Y")
-    try:
-        df = load_worksheet_df(sheet_name, worksheet_name)
-        df["Rain_Last_24_Hrs"] = pd.to_numeric(df["Rain_Last_24_Hrs"], errors='coerce')
+    # ---- Tiles ----
+    state_avg = df["Rain_Last_24_Hrs"].mean()
+    highest_taluka = df.loc[df["Rain_Last_24_Hrs"].idxmax()]
+    percent_avg = df["Percent_Against_Avg"].mean()
 
-        # ---- Tiles ----
-        state_avg = df["Rain_Last_24_Hrs"].mean()
-        highest_taluka = df.loc[df["Rain_Last_24_Hrs"].idxmax()]
-        percent_avg = df["Percent_Against_Avg"].mean()
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Rainfall (State Avg.)", f"{state_avg:.1f} mm")
+    col2.metric("Highest Rainfall Taluka", f"{highest_taluka['Taluka']} ({highest_taluka['Rain_Last_24_Hrs']} mm)")
+    col3.metric("State Avg Percent Till Today", f"{percent_avg:.1f}%")
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Rainfall (State Avg.)", f"{state_avg:.1f} mm")
-        col2.metric("Highest Rainfall Taluka", f"{highest_taluka['Taluka']} ({highest_taluka['Rain_Last_24_Hrs']} mm)")
-        col3.metric("State Avg Percent Till Today", f"{percent_avg:.1f}%")
+    # ---- Choropleth Map ----
+    fig = plot_choropleth(df, "gujarat_taluka_clean.geojson")
+    st.plotly_chart(fig, use_container_width=True)
 
-        # ---- Choropleth Map ----
-        fig = plot_choropleth(df, "gujarat_taluka_clean.geojson", "Rain_Last_24_Hrs")
-        st.plotly_chart(fig, use_container_width=True)
+# ---------------------------- UI ----------------------------
+st.set_page_config(layout="wide")
+st.title("Gujarat Rainfall Dashboard")
 
-        # ---- Table View ----
-        if st.checkbox("Show Data Table"):
-            st.dataframe(df)
+data_type = st.radio("Select Rainfall Data Type", ["2 Hourly Rainfall", "24 Hourly Rainfall"])
+selected_date = st.date_input("Select Date", datetime.today())
 
-    except Exception as e:
-        st.error(f"Unable to load 24 Hourly data: {e}")
+selected_year = selected_date.strftime("%Y")
+selected_month = selected_date.strftime("%B")
+selected_date_str = selected_date.strftime("%d-%m-%Y")
 
-elif rainfall_type == "2 Hourly":
-    sheet_name = f"2HR_Rainfall_{selected_date.strftime('%B_%Y')}"
-    worksheet_name = selected_date.strftime("%d-%m-%Y")
-    try:
-        df = load_worksheet_df(sheet_name, worksheet_name)
-        df["Rainfall"] = pd.to_numeric(df["Rainfall"], errors='coerce')
+if data_type == "24 Hourly Rainfall":
+    folder_name = "Rainfall Dashboard/24 Hourly Sheets"
+    sheet_name = f"24HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name = f"master24hrs_{selected_date_str}"
 
-        st.subheader(f"2 Hourly Rainfall Data ({selected_date.strftime('%d-%m-%Y')})")
+    df = load_sheet_data(folder_name, selected_year, selected_month, sheet_name, tab_name)
 
-        col1, col2 = st.columns(2)
-        total_rows = df.shape[0]
-        highest = df.loc[df["Rainfall"].idxmax()]
+    if not df.empty:
+        show_24_hourly_dashboard(df, selected_date)
+    else:
+        st.warning("⚠️ No data available for this date.")
 
-        col1.metric("Total Entries", total_rows)
-        col2.metric("Max Rainfall", f"{highest['Taluka']} ({highest['Rainfall']} mm)")
+elif data_type == "2 Hourly Rainfall":
+    folder_name = "Rainfall Dashboard/2 Hourly Sheets"
+    sheet_name = f"2HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name = f"master2hrs_{selected_date_str}"
 
-        fig = plot_choropleth(df.rename(columns={"Rainfall": "Rain_Last_24_Hrs"}), "gujarat_taluka_clean.geojson", "Rain_Last_24_Hrs")
-        st.plotly_chart(fig, use_container_width=True)
+    df = load_sheet_data(folder_name, selected_year, selected_month, sheet_name, tab_name)
 
-        if st.checkbox("Show Data Table"):
-            st.dataframe(df)
-
-    except Exception as e:
-        st.error(f"Unable to load 2 Hourly data: {e}")
+    if not df.empty:
+        st.subheader("📊 2 Hourly Rainfall Data")
+        st.dataframe(df)
+    else:
+        st.warning("⚠️ No data available for this date.")

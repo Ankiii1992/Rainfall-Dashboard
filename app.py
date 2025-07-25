@@ -63,9 +63,9 @@ def load_worksheet_df(sheet_name, worksheet_name):
     return df
 
 # ---------------------------- CHOROPLETH ----------------------------
-def plot_choropleth(df, geojson_path):
+def plot_choropleth(df, geojson_path, value_col):
     gdf = gpd.read_file(geojson_path)
-    df["Rainfall_Category"] = df["Rain_Last_24_Hrs"].apply(classify_rainfall)
+    df["Rainfall_Category"] = df[value_col].apply(classify_rainfall)
 
     fig = px.choropleth_mapbox(
         df,
@@ -78,7 +78,7 @@ def plot_choropleth(df, geojson_path):
         center={"lat": 22.3, "lon": 71.7},
         opacity=0.7,
         hover_name="Taluka",
-        hover_data={"Rain_Last_24_Hrs": True, "District": True}
+        hover_data={value_col: True, "District": True}
     )
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
     return fig
@@ -88,12 +88,12 @@ st.title("Gujarat Rainfall Dashboard")
 
 rainfall_type = st.selectbox("Select Rainfall Type", ["2 Hourly", "24 Hourly"])
 
+selected_date = st.date_input("Select Date", datetime.today())
+
 if rainfall_type == "24 Hourly":
-    selected_date = st.date_input("Select Date", datetime.today())
     title = generate_title_from_date(selected_date)
     st.subheader(title)
 
-    # Load rainfall data (sheet & tab assumed pre-created)
     sheet_name = f"24HR_Rainfall_{selected_date.strftime('%B_%Y')}"
     worksheet_name = selected_date.strftime("%d-%m-%Y")
     try:
@@ -111,8 +111,37 @@ if rainfall_type == "24 Hourly":
         col3.metric("State Avg Percent Till Today", f"{percent_avg:.1f}%")
 
         # ---- Choropleth Map ----
-        fig = plot_choropleth(df, "gujarat_taluka_clean.geojson")
+        fig = plot_choropleth(df, "gujarat_taluka_clean.geojson", "Rain_Last_24_Hrs")
         st.plotly_chart(fig, use_container_width=True)
 
+        # ---- Table View ----
+        if st.checkbox("Show Data Table"):
+            st.dataframe(df)
+
     except Exception as e:
-        st.error(f"Unable to load data: {e}")
+        st.error(f"Unable to load 24 Hourly data: {e}")
+
+elif rainfall_type == "2 Hourly":
+    sheet_name = f"2HR_Rainfall_{selected_date.strftime('%B_%Y')}"
+    worksheet_name = selected_date.strftime("%d-%m-%Y")
+    try:
+        df = load_worksheet_df(sheet_name, worksheet_name)
+        df["Rainfall"] = pd.to_numeric(df["Rainfall"], errors='coerce')
+
+        st.subheader(f"2 Hourly Rainfall Data ({selected_date.strftime('%d-%m-%Y')})")
+
+        col1, col2 = st.columns(2)
+        total_rows = df.shape[0]
+        highest = df.loc[df["Rainfall"].idxmax()]
+
+        col1.metric("Total Entries", total_rows)
+        col2.metric("Max Rainfall", f"{highest['Taluka']} ({highest['Rainfall']} mm)")
+
+        fig = plot_choropleth(df.rename(columns={"Rainfall": "Rain_Last_24_Hrs"}), "gujarat_taluka_clean.geojson", "Rain_Last_24_Hrs")
+        st.plotly_chart(fig, use_container_width=True)
+
+        if st.checkbox("Show Data Table"):
+            st.dataframe(df)
+
+    except Exception as e:
+        st.error(f"Unable to load 2 Hourly data: {e}")

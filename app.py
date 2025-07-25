@@ -112,10 +112,11 @@ selected_date = st.date_input("Select Date", datetime.today())
 
 selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
-selected_date_str = selected_date.strftime("%d-%m-%Y")
+# --- FIX APPLIED HERE ---
+selected_date_str = selected_date.strftime("%Y-%m-%d") # Changed to YYYY-MM-DD
 
 if data_type == "24 Hourly Rainfall":
-    folder_name = "Rainfall Dashboard/24 Hourly Sheets"
+    folder_name = "Rainfall Dashboard/24 Hourly Sheets" # This isn't actually used in load_sheet_data
     sheet_name = f"24HR_Rainfall_{selected_month}_{selected_year}"
     tab_name = f"master24hrs_{selected_date_str}"
 
@@ -127,9 +128,9 @@ if data_type == "24 Hourly Rainfall":
         st.warning("⚠️ No data available for this date.")
 
 elif data_type == "2 Hourly Rainfall":
-    folder_name = "Rainfall Dashboard/2 Hourly Sheets"
+    folder_name = "Rainfall Dashboard/2 Hourly Sheets" # This isn't actually used in load_sheet_data
     sheet_name = f"2HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name = f"master2hrs_{selected_date_str}"
+    tab_name = f"master2hrs_{selected_date_str}" # This will also now be YYYY-MM-DD
 
     df = load_sheet_data(folder_name, selected_year, selected_month, sheet_name, tab_name)
 

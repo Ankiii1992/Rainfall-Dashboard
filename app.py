@@ -1,111 +1,118 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
-import calendar
+import json
+from datetime import datetime, timedelta
+import geopandas as gpd
+import plotly.graph_objects as go
 
-# --- Google Drive Setup ---
-
+# ---------------------------- CONFIG ----------------------------
 @st.cache_resource
 def get_gsheet_client():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    client = gspread.authorize(creds)
-    return client
-    
-def load_sheet_data(base_folder, year, month, sheet_name, tab_name):
+    return gspread.authorize(creds)
+
+# ---------------------------- RAINFALL CATEGORY LOGIC ----------------------------
+color_map = {
+    "No Rain": "#f8f8f8",
+    "Very Light": "#e0ffe0",
+    "Light": "#00ff01",
+    "Moderate": "#00ffff",
+    "Rather Heavy": "#ffeb3b",
+    "Heavy": "#ff8c00",
+    "Very Heavy": "#d50000",
+    "Extremely Heavy": "#f820fe",
+    "Exceptional": "#e8aaf5"
+}
+
+def classify_rainfall(rainfall):
+    if pd.isna(rainfall) or rainfall == 0:
+        return "No Rain"
+    elif rainfall <= 2.4:
+        return "Very Light"
+    elif rainfall <= 7.5:
+        return "Light"
+    elif rainfall <= 35.5:
+        return "Moderate"
+    elif rainfall <= 64.4:
+        return "Rather Heavy"
+    elif rainfall <= 124.4:
+        return "Heavy"
+    elif rainfall <= 244.4:
+        return "Very Heavy"
+    elif rainfall <= 350:
+        return "Extremely Heavy"
+    else:
+        return "Exceptional"
+
+# ---------------------------- UTILITY ----------------------------
+def generate_title_from_date(selected_date):
+    start_date = (selected_date - timedelta(days=1)).strftime("%d-%m-%Y")
+    end_date = selected_date.strftime("%d-%m-%Y")
+    return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
+
+# ---------------------------- LOAD DATA ----------------------------
+def load_worksheet_df(sheet_name, worksheet_name):
+    client = get_gsheet_client()
+    sheet = client.open(sheet_name).worksheet(worksheet_name)
+    df = pd.DataFrame(sheet.get_all_records())
+    return df
+
+# ---------------------------- CHOROPLETH ----------------------------
+def plot_choropleth(df, geojson_path):
+    gdf = gpd.read_file(geojson_path)
+    df["Rainfall_Category"] = df["Rain_Last_24_Hrs"].apply(classify_rainfall)
+
+    fig = px.choropleth_mapbox(
+        df,
+        geojson=gdf.set_index("TALUKA").__geo_interface__,
+        locations="Taluka",
+        color="Rainfall_Category",
+        color_discrete_map=color_map,
+        mapbox_style="carto-positron",
+        zoom=5.2,
+        center={"lat": 22.3, "lon": 71.7},
+        opacity=0.7,
+        hover_name="Taluka",
+        hover_data={"Rain_Last_24_Hrs": True, "District": True}
+    )
+    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+    return fig
+
+# ---------------------------- STREAMLIT UI ----------------------------
+st.title("Gujarat Rainfall Dashboard")
+
+rainfall_type = st.selectbox("Select Rainfall Type", ["2 Hourly", "24 Hourly"])
+
+if rainfall_type == "24 Hourly":
+    selected_date = st.date_input("Select Date", datetime.today())
+    title = generate_title_from_date(selected_date)
+    st.subheader(title)
+
+    # Load rainfall data (sheet & tab assumed pre-created)
+    sheet_name = f"24HR_Rainfall_{selected_date.strftime('%B_%Y')}"
+    worksheet_name = selected_date.strftime("%d-%m-%Y")
     try:
-        folder_path = f"{base_folder}/{year}/{month}"
-        spreadsheet = client.open(sheet_name)
-        worksheet = spreadsheet.worksheet(tab_name)
-        data = worksheet.get_all_records()
-        return pd.DataFrame(data)
+        df = load_worksheet_df(sheet_name, worksheet_name)
+        df["Rain_Last_24_Hrs"] = pd.to_numeric(df["Rain_Last_24_Hrs"], errors='coerce')
+
+        # ---- Tiles ----
+        state_avg = df["Rain_Last_24_Hrs"].mean()
+        highest_taluka = df.loc[df["Rain_Last_24_Hrs"].idxmax()]
+        percent_avg = df["Percent_Against_Avg"].mean()
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Rainfall (State Avg.)", f"{state_avg:.1f} mm")
+        col2.metric("Highest Rainfall Taluka", f"{highest_taluka['Taluka']} ({highest_taluka['Rain_Last_24_Hrs']} mm)")
+        col3.metric("State Avg Percent Till Today", f"{percent_avg:.1f}%")
+
+        # ---- Choropleth Map ----
+        fig = plot_choropleth(df, "gujarat_taluka_clean.geojson")
+        st.plotly_chart(fig, use_container_width=True)
+
     except Exception as e:
-        st.error(f"❌ Failed to load data: {e}")
-        return pd.DataFrame()
-
-# --- Tiles for 24 Hourly Rainfall ---
-def show_24_hourly_dashboard(df):
-    st.subheader("📊 24 Hourly Rainfall Summary")
-
-    df["Rain_Last_24_Hrs"] = pd.to_numeric(df["Rain_Last_24_Hrs"], errors='coerce')
-    df = df.dropna(subset=["Rain_Last_24_Hrs"])
-
-    state_avg = df["Rain_Last_24_Hrs"].mean()
-
-    max_row = df.loc[df["Rain_Last_24_Hrs"].idxmax()]
-    max_taluka_name = f"{max_row['Taluka']} ({max_row['District']})"
-    max_rain = max_row["Rain_Last_24_Hrs"]
-
-    district_avg_df = df.groupby("District")["Rain_Last_24_Hrs"].mean().reset_index()
-    top_district_row = district_avg_df.loc[district_avg_df["Rain_Last_24_Hrs"].idxmax()]
-    top_district = top_district_row["District"]
-    top_district_avg = top_district_row["Rain_Last_24_Hrs"]
-
-    above_avg_count = (df["Rain_Last_24_Hrs"] > state_avg).sum()
-    total_talukas = len(df)
-    percent_above = (above_avg_count / total_talukas) * 100
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("🌧️ State Avg Rainfall", f"{state_avg:.1f} mm")
-
-    with col2:
-        st.metric("🌧️ Max Rainfall (Taluka)", max_taluka_name, f"{max_rain:.1f} mm")
-
-    with col3:
-        st.metric("🏞️ Top District (Avg)", top_district, f"{top_district_avg:.1f} mm")
-
-    with col4:
-        st.metric("📈 Talukas > State Avg", f"{percent_above:.1f}%", f"{above_avg_count} / {total_talukas}")
-
-    st.dataframe(df)
-
-# --- Main Streamlit App ---
-client = get_gsheet_client()
-st.set_page_config(page_title="Rainfall Dashboard", layout="wide")
-st.title("☁️ Gujarat Rainfall Dashboard")
-
-# --- UI Controls ---
-data_type = st.radio("Select Data Type", ["2 Hourly Rainfall", "24 Hourly Rainfall"], index=0)
-
-today = datetime.today()
-years = list(range(2023, today.year + 1))
-months = list(calendar.month_name)[1:]  # Skips empty first entry
-selected_year = st.selectbox("Select Year", years, index=years.index(today.year))
-selected_month = st.selectbox("Select Month", months, index=today.month - 1)
-
-# Get number of days in selected month
-days_in_month = calendar.monthrange(selected_year, months.index(selected_month)+1)[1]
-selected_day = st.selectbox("Select Day", list(range(1, days_in_month + 1)), index=today.day - 1)
-
-selected_date = datetime(selected_year, months.index(selected_month)+1, selected_day).strftime("%Y-%m-%d")
-
-# --- Sheet File Setup ---
-if data_type == "24 Hourly Rainfall":
-    folder_name = "Rainfall Dashboard/24 Hourly Sheets"
-    sheet_name = f"24HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name = f"master24hrs_{selected_date}"
-
-    df = load_sheet_data(folder_name, selected_year, selected_month, sheet_name, tab_name)
-
-    if not df.empty:
-        show_24_hourly_dashboard(df)
-    else:
-        st.warning("⚠️ No data available for this date.")
-
-elif data_type == "2 Hourly Rainfall":
-    folder_name = "Rainfall Dashboard/2 Hourly Sheets"
-    sheet_name = f"2HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name = f"master2hrs_{selected_date}"
-
-    df = load_sheet_data(folder_name, selected_year, selected_month, sheet_name, tab_name)
-
-    if not df.empty:
-        st.subheader("📊 2 Hourly Rainfall Data")
-        st.dataframe(df)
-    else:
-        st.warning("⚠️ No data available for this date.")
+        st.error(f"Unable to load data: {e}")

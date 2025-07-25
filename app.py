@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from oauth2client.service_account import Credentials
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 import calendar
 

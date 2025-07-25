@@ -247,5 +247,5 @@ with tab_hourly:
 
 with tab_historical:
     st.header("Historical Rainfall Data")
-    st.info("💡 **Coming Soon:** This section will feature aggregated monthly/seasonal data, year-on-year comparisons, and long-term trends.")
-    st.write("We can discuss the strategy for loading and aggregating historical data once the daily view is finalized.")
+    st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
+   

@@ -5,7 +5,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime, timedelta
-import geopandas as gpd
+# import geopandas as gpd # We might not need this if we're directly passing the geojson dict
 
 # ---------------------------- CONFIG ----------------------------
 @st.cache_resource
@@ -15,7 +15,16 @@ def get_gsheet_client():
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     return gspread.authorize(creds)
 
-# ---------------------------- RAINFALL CATEGORY LOGIC ----------------------------
+@st.cache_resource # Cache the GeoJSON loading
+def load_geojson(path):
+    import json # Import json here to keep load_geojson self-contained
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            geojson_data = json.load(f)
+        return geojson_data
+    return None
+
+# --- Rainfall Category & Color Mapping (for Plotly map) ---
 color_map = {
     "No Rain": "#f8f8f8",
     "Very Light": "#e0ffe0",
@@ -64,22 +73,40 @@ def load_sheet_data(folder_name, year, month, sheet_name, tab_name):
         st.error(f"❌ Failed to load sheet '{sheet_name}' or tab '{tab_name}': {e}")
         return pd.DataFrame()
 
+# --- MODIFIED plot_choropleth function ---
 def plot_choropleth(df, geojson_path):
-    gdf = gpd.read_file(geojson_path)
-    df["Rainfall_Category"] = df["Rain_Last_24_Hrs"].apply(classify_rainfall)
+    geojson_data = load_geojson(geojson_path)
+    if not geojson_data:
+        st.error("❌ GeoJSON file not loaded. Cannot plot map.")
+        return go.Figure() # Return an empty figure
+
+    # Ensure Taluka names in DataFrame are consistent with GeoJSON property for matching
+    # The old code used .strip().lower() on the 'Taluka' column of df_map
+    df_plot = df.copy() # Work on a copy to avoid modifying original df
+    df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
+    df_plot["Rainfall_Category"] = df_plot["Rain_Last_24_Hrs"].apply(classify_rainfall)
+
+    # Normalize GeoJSON properties for matching
+    # The old code modified the GeoJSON in place: feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
+    # Let's ensure this is handled for the choropleth
+    for feature in geojson_data["features"]:
+        if "SUB_DISTRICT" in feature["properties"]:
+            feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
 
     fig = px.choropleth_mapbox(
-        df,
-        geojson=gdf.set_index("TALUKA").__geo_interface__,
-        locations="Taluka",
+        df_plot, # Use the prepared df_plot
+        geojson=geojson_data, # Pass the raw GeoJSON dictionary
+        featureidkey="properties.SUB_DISTRICT", # Match 'Taluka' from df to 'SUB_DISTRICT' in geojson properties
+        locations="Taluka", # Column in df_plot
         color="Rainfall_Category",
         color_discrete_map=color_map,
-        mapbox_style="carto-positron",
-        zoom=5.2,
-        center={"lat": 22.3, "lon": 71.7},
-        opacity=0.7,
+        mapbox_style="open-street-map", # Used "open-street-map" in old code, "carto-positron" in new
+        zoom=6, # Adjusted to match old code's zoom
+        center={"lat": 22.5, "lon": 71.5}, # Adjusted to match old code's center
+        opacity=0.75, # Adjusted to match old code's opacity
         hover_name="Taluka",
-        hover_data={"Rain_Last_24_Hrs": True, "District": True}
+        hover_data={"Rain_Last_24_Hrs": True, "District": True},
+        height=650 # Adjusted to match old code's height
     )
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
     return fig
@@ -92,12 +119,14 @@ def show_24_hourly_dashboard(df, selected_date):
     # ---- Tiles ----
     state_avg = df["Rain_Last_24_Hrs"].mean()
     highest_taluka = df.loc[df["Rain_Last_24_Hrs"].idxmax()]
-    percent_avg = df["Percent_Against_Avg"].mean()
+    # Assuming "Percent_Against_Avg" is present in your new GSheet data
+    # If not, remove or handle this line gracefully
+    percent_against_avg = df["Percent_Against_Avg"].mean() if "Percent_Against_Avg" in df.columns else 0.0
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Rainfall (State Avg.)", f"{state_avg:.1f} mm")
     col2.metric("Highest Rainfall Taluka", f"{highest_taluka['Taluka']} ({highest_taluka['Rain_Last_24_Hrs']} mm)")
-    col3.metric("State Avg Percent Till Today", f"{percent_avg:.1f}%")
+    col3.metric("State Avg Percent Till Today", f"{percent_against_avg:.1f}%") # Use percent_against_avg
 
     # ---- Choropleth Map ----
     fig = plot_choropleth(df, "gujarat_taluka_clean.geojson")
@@ -112,8 +141,7 @@ selected_date = st.date_input("Select Date", datetime.today())
 
 selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
-# --- FIX APPLIED HERE ---
-selected_date_str = selected_date.strftime("%Y-%m-%d") # Changed to YYYY-MM-DD
+selected_date_str = selected_date.strftime("%Y-%m-%d") # Changed to YYYY-MM-DD as per your GeoSheet tab name
 
 if data_type == "24 Hourly Rainfall":
     folder_name = "Rainfall Dashboard/24 Hourly Sheets" # This isn't actually used in load_sheet_data
@@ -123,6 +151,14 @@ if data_type == "24 Hourly Rainfall":
     df = load_sheet_data(folder_name, selected_year, selected_month, sheet_name, tab_name)
 
     if not df.empty:
+        # Ensure 'Rain_Last_24_Hrs' and 'Taluka' columns exist for 24-hour data
+        if "Rain_Last_24_Hrs" not in df.columns:
+            st.error("Column 'Rain_Last_24_Hrs' not found in the loaded data for 24 Hourly Rainfall.")
+            df["Rain_Last_24_Hrs"] = 0 # Add a placeholder to prevent further errors
+        if "Taluka" not in df.columns:
+            st.error("Column 'Taluka' not found in the loaded data for 24 Hourly Rainfall.")
+            df["Taluka"] = "" # Add a placeholder
+        
         show_24_hourly_dashboard(df, selected_date)
     else:
         st.warning("⚠️ No data available for this date.")

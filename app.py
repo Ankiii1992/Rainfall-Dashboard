@@ -22,7 +22,7 @@ def load_geojson(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
         return geojson_data
-    st.error(f"GeoJSON file not found at: {path}")
+    # No st.error here, let the calling function decide how to handle missing geojson if it's critical
     return None
 
 # ---------------------------- RAINFALL CATEGORY LOGIC ----------------------------
@@ -64,29 +64,19 @@ def generate_title_from_date(selected_date):
     end_date = selected_date.strftime("%d-%m-%Y")
     return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
 
-def load_sheet_data(folder_name, year, month, sheet_name, tab_name):
-    st.info(f"Attempting to load data from Sheet: `{sheet_name}` | Tab: `{tab_name}`") # Debug print
+def load_sheet_data(sheet_name, tab_name): # Removed unused folder_name, year, month params
     try:
         client = get_gsheet_client()
         sheet = client.open(sheet_name).worksheet(tab_name)
         df = pd.DataFrame(sheet.get_all_records())
         df.columns = df.columns.str.strip()
         df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
-        st.success(f"Successfully loaded {len(df)} rows from '{tab_name}' in '{sheet_name}'.") # Debug print
         return df
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error(f"❌ Google Sheet '{sheet_name}' not found. Check sheet name and service account permissions.")
-        return pd.DataFrame()
-    except gspread.exceptions.WorksheetNotFound:
-        st.error(f"❌ Tab '{tab_name}' not found within sheet '{sheet_name}'. Check tab name carefully.")
-        return pd.DataFrame()
-    except Exception as e:
-        st.error(f"❌ Failed to load sheet '{sheet_name}' or tab '{tab_name}'. Error details: {e}")
-        st.exception(e)
-        return pd.DataFrame()
+    except Exception: # Catch any exception silently
+        return pd.DataFrame() # Return empty DataFrame on failure
 
-# --- MODIFIED plot_choropleth function (removed highlight_taluka as search is gone) ---
-def plot_choropleth(df, geojson_path): # Removed highlight_taluka parameter
+# --- plot_choropleth function ---
+def plot_choropleth(df, geojson_path):
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
         return go.Figure()
@@ -95,8 +85,7 @@ def plot_choropleth(df, geojson_path): # Removed highlight_taluka parameter
     if "Taluka" in df_plot.columns:
         df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
     else:
-        st.warning("⚠️ 'Taluka' column not found in DataFrame for mapping. Map may not display correctly.")
-        return go.Figure()
+        return go.Figure() # Return empty if no Taluka column
 
     df_plot["Rainfall_Category"] = df_plot["Rain_Last_24_Hrs"].apply(classify_rainfall)
 
@@ -104,7 +93,6 @@ def plot_choropleth(df, geojson_path): # Removed highlight_taluka parameter
         if "SUB_DISTRICT" in feature["properties"]:
             feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
 
-    # No highlight shapes needed as search is removed
     shapes = [] 
 
     fig = px.choropleth_mapbox(
@@ -126,12 +114,12 @@ def plot_choropleth(df, geojson_path): # Removed highlight_taluka parameter
     fig.update_layout(
         margin={"r":0,"t":0,"l":0,"b":0},
         uirevision='true',
-        shapes=shapes # This will be an empty list now
+        shapes=shapes
     )
     return fig
 
 
-# --- show_24_hourly_dashboard function (simplified, no search/filter logic) ---
+# --- show_24_hourly_dashboard function ---
 def show_24_hourly_dashboard(df, selected_date):
     required_cols = ["Rain_Last_24_Hrs", "Taluka", "District"]
     for col in required_cols:
@@ -169,10 +157,10 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ---- Choropleth Map ----
-    fig = plot_choropleth(df, "gujarat_taluka_clean.geojson") # No highlight_taluka passed
+    fig = plot_choropleth(df, "gujarat_taluka_clean.geojson")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Display full data as a table (no filtering here)
+    # Display full data as a table
     st.subheader("📋 Full Rainfall Data Table")
     df_display = df.sort_values(by="Rain_Last_24_Hrs", ascending=False).reset_index(drop=True)
     df_display.index += 1
@@ -186,11 +174,9 @@ st.title("Gujarat Rainfall Dashboard")
 st.markdown("---")
 st.subheader("🗓️ Select Date for Rainfall Data")
 
-# Maintain selected_date across reruns
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.today().date()
 
-# Horizontal layout for date picker and navigation buttons
 col_date_picker, col_prev_btn, col_today_btn, col_next_btn = st.columns([0.2, 0.1, 0.1, 0.1])
 
 with col_date_picker:
@@ -203,32 +189,31 @@ with col_date_picker:
         st.session_state.selected_date = selected_date_from_picker
         st.rerun()
 
-selected_date = st.session_state.selected_date # Use the authoritative date
+selected_date = st.session_state.selected_date
 
 with col_prev_btn:
-    st.markdown("<br>", unsafe_allow_html=True) # Align buttons
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("⬅️ Previous Day", key="prev_day_btn"):
         st.session_state.selected_date = selected_date - timedelta(days=1)
         st.rerun()
 
 with col_today_btn:
-    st.markdown("<br>", unsafe_allow_html=True) # Align buttons
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🗓️ Today", key="today_btn"):
         st.session_state.selected_date = datetime.today().date()
         st.rerun()
 
 with col_next_btn:
-    st.markdown("<br>", unsafe_allow_html=True) # Align buttons
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("Next Day ➡️", key="next_day_btn", disabled=(selected_date >= datetime.today().date())):
         st.session_state.selected_date = selected_date + timedelta(days=1)
         st.rerun()
 
-st.markdown("---") # Separator
+st.markdown("---")
 
-# Derive date components from the authoritative selected_date
 selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
-selected_date_str = selected_date.strftime("%Y-%m-%d") # YYYY-MM-DD for GSheets tab names
+selected_date_str = selected_date.strftime("%Y-%m-%d")
 
 # --- Main Content Tabs ---
 tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
@@ -239,27 +224,26 @@ with tab_daily:
     sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_24hr = f"master24hrs_{selected_date_str}"
 
-    df_24hr = load_sheet_data("Placeholder for folder name", selected_year, selected_month, sheet_name_24hr, tab_name_24hr)
+    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr) # Simplified call
 
     if not df_24hr.empty:
-        # Removed the search bar here
         show_24_hourly_dashboard(df_24hr, selected_date)
     else:
-        st.warning(f"⚠️ No 24-hourly data available for {selected_date_str}. Please select another date or check the data source.")
+        st.warning(f"⚠️ Data is not available for {selected_date_str}.")
 
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_2hr = f"master2hrs_{selected_date_str}"
 
-    df_2hr = load_sheet_data("Placeholder for folder name", selected_year, selected_month, sheet_name_2hr, tab_name_2hr)
+    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr) # Simplified call
 
     if not df_2hr.empty:
         st.subheader("Raw 2 Hourly Data")
         st.dataframe(df_2hr, use_container_width=True)
         st.info("💡 **Next Steps:** We can add interactive charts (e.g., time series) for this data here once the daily summary is solid!")
     else:
-        st.warning(f"⚠️ No 2-hourly data available for {selected_date_str}. Please select another date or check the data source.")
+        st.warning(f"⚠️ Data is not available for {selected_date_str}.")
 
 with tab_historical:
     st.header("Historical Rainfall Data")

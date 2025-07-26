@@ -254,8 +254,6 @@ def show_24_hourly_dashboard(df, selected_date):
     title = generate_title_from_date(selected_date)
     st.subheader(title)
 
-    # --- No merging with Zone Data, using df directly ---
-
     # ---- Metrics ----
     state_avg = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
 
@@ -269,7 +267,7 @@ def show_24_hourly_dashboard(df, selected_date):
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>State Rainfall in last 24 hours (Avg.)</h4><h2>{state_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>State Rainfall (Avg.)</h4><h2>{state_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col2:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -280,9 +278,9 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown(f"<div class='metric-tile'><h4>State Avg Rainfall (%) Till Today</h4><h2>{percent_against_avg:.1f}%</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- NEW: Moved Talukas > X mm tiles from Hourly Trends to Daily Summary ---
+    # --- NEW: Moved Talukas > X mm tiles to Daily Summary with new titles ---
     st.markdown("---") # Separator for new metrics section
-    st.markdown("#### 🌧️ Daily Rainfall Metrics (Last 24 Hours)")
+    st.markdown("### 📊 Daily Rainfall Metrics") # New title for these tiles
     col_daily_1, col_daily_2, col_daily_3 = st.columns(3)
 
     more_than_200_daily = df[df['Total_mm'] > 200].shape[0]
@@ -291,15 +289,15 @@ def show_24_hourly_dashboard(df, selected_date):
 
     with col_daily_1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Talukas > 200 mm</h4><h2>{more_than_200_daily}</h2><p>in last 24 hrs</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>Talukas > 200 mm</h4><h2>{more_than_200_daily}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col_daily_2:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Talukas > 100 mm</h4><h2>{more_than_100_daily}</h2><p>in last 24 hrs</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>Talukas > 100 mm</h4><h2>{more_than_100_daily}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col_daily_3:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Talukas > 50 mm</h4><h2>{more_than_50_daily}</h2><p>in last 24 hrs</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>Talukas > 50 mm</h4><h2>{more_than_50_daily}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     # --- Rainfall Distribution Overview (Map and Insights) ---
@@ -497,7 +495,7 @@ with tab_daily:
     if not df_24hr.empty:
         show_24_hourly_dashboard(df_24hr, selected_date)
     else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}. Please check sheet name '24HR_Rainfall_{selected_month}_{selected_year}' and tab name 'master24hrs_{selected_date_str}'.")
+        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
@@ -558,9 +556,7 @@ with tab_hourly:
 
         st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
 
-        # Removed "### Overview (2-Hourly Data)" heading (from previous confirmed change)
         row1 = st.columns(3)
-        # row2 (Talukas > X mm tiles) removed from here and moved to Daily Summary
 
         last_slot_label = slot_labels[existing_order[-1]]
 
@@ -607,7 +603,7 @@ with tab_hourly:
         st.dataframe(df_display_2hr, use_container_width=True, height=600)
 
     else:
-        st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}. Please check sheet name '2HR_Rainfall_{selected_month}_{selected_year}' and tab name '2hrs_master_{selected_date_str}'.")
+        st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
 
 with tab_historical:

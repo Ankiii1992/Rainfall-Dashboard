@@ -7,6 +7,7 @@ from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime, timedelta
 import os
+import io
 
 # ---------------------------- CONFIG ----------------------------
 @st.cache_resource
@@ -48,7 +49,7 @@ st.markdown("""
         text-align: center;
         transition: 0.3s ease;
         border: 1px solid #c5e1e9;
-        height: 165px;
+        height: 165px; /* Adjusted height for consistency */
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -146,7 +147,8 @@ ordered_categories = [
 ]
 
 
-# ---------------------------- UTILITY ----------------------------
+# ---------------------------- UTILITY FUNCTIONS ----------------------------
+
 def generate_title_from_date(selected_date):
     start_date = (selected_date - timedelta(days=1)).strftime("%d-%m-%Y")
     end_date = selected_date.strftime("%d-%m-%Y")
@@ -172,12 +174,14 @@ def load_sheet_data(sheet_name, tab_name):
 def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution by Taluka"):
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
+        st.error("GeoJSON data not available for plotting map.")
         return go.Figure()
 
     df_plot = df.copy()
     if "Taluka" in df_plot.columns:
         df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
     else:
+        st.warning("Taluka column not found in data for map. Map will not display.")
         return go.Figure()
 
     # The column for coloring the map should be 'Total_mm' (daily total)
@@ -193,7 +197,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution by Ta
     else:
         # If Total_mm is missing, categorize based on a default or raise error
         st.warning("'Total_mm' column not found for map categorization. Map may not display categories correctly.")
-        df_plot["Rainfall_Category"] = "No Rain" # Default category
+        df_plot["Rainfall_Category"] = "No Rain" # Default category for map if data is missing
 
     for feature in geojson_data["features"]:
         if "SUB_DISTRICT" in feature["properties"]:
@@ -250,6 +254,8 @@ def show_24_hourly_dashboard(df, selected_date):
     title = generate_title_from_date(selected_date)
     st.subheader(title)
 
+    # --- No merging with Zone Data, using df directly ---
+
     # ---- Metrics ----
     state_avg = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
 
@@ -263,7 +269,6 @@ def show_24_hourly_dashboard(df, selected_date):
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        # CHANGE 3: Update 1st tile title
         st.markdown(f"<div class='metric-tile'><h4>State Rainfall in last 24 hours (Avg.)</h4><h2>{state_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col2:
@@ -272,17 +277,39 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown("</div>", unsafe_allow_html=True)
     with col3:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        # CHANGE 3: Update 3rd tile title
         st.markdown(f"<div class='metric-tile'><h4>State Avg Rainfall (%) Till Today</h4><h2>{percent_against_avg:.1f}%</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- Rainfall Distribution Overview (Map and Insights - MOVED HERE) ---
+    # --- NEW: Moved Talukas > X mm tiles from Hourly Trends to Daily Summary ---
+    st.markdown("---") # Separator for new metrics section
+    st.markdown("#### 🌧️ Daily Rainfall Metrics (Last 24 Hours)")
+    col_daily_1, col_daily_2, col_daily_3 = st.columns(3)
+
+    more_than_200_daily = df[df['Total_mm'] > 200].shape[0]
+    more_than_100_daily = df[df['Total_mm'] > 100].shape[0]
+    more_than_50_daily = df[df['Total_mm'] > 50].shape[0]
+
+    with col_daily_1:
+        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>Talukas > 200 mm</h4><h2>{more_than_200_daily}</h2><p>in last 24 hrs</p></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    with col_daily_2:
+        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>Talukas > 100 mm</h4><h2>{more_than_100_daily}</h2><p>in last 24 hrs</p></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    with col_daily_3:
+        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>Talukas > 50 mm</h4><h2>{more_than_50_daily}</h2><p>in last 24 hrs</p></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # --- Rainfall Distribution Overview (Map and Insights) ---
+    st.markdown("---") # Separator for map section
     st.markdown("### 🗺️ Rainfall Distribution Overview")
 
     taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
 
     if taluka_geojson:
-        # Prepare df_map (using df for 24-hour data)
+        # Prepare df_map (using df directly, no zones)
         df_map = df.copy()
         df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
         df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
@@ -297,8 +324,10 @@ def show_24_hourly_dashboard(df, selected_date):
 
         with map_col:
             st.markdown("#### Gujarat Rainfall Map (by Taluka)")
-            fig_map = plot_choropleth(df_map, "gujarat_taluka_clean.geojson", "Gujarat Daily Rainfall Distribution by Taluka")
-            st.plotly_chart(fig_map, use_container_width=True)
+            # --- Applying st.spinner here ---
+            with st.spinner("Loading map..."):
+                fig_map = plot_choropleth(df_map, "gujarat_taluka_clean.geojson", "Gujarat Daily Rainfall Distribution by Taluka")
+                st.plotly_chart(fig_map, use_container_width=True)
 
         with insights_col:
             st.markdown("#### Key Insights & Distributions")
@@ -371,7 +400,8 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         st.error("❌ GeoJSON file (gujarat_taluka_clean.geojson) not found. Please ensure it's in the same directory as your app.")
 
-    # --- Top 10 Talukas by Total Rainfall (Bar Chart - MOVED HERE) ---
+    # --- Top 10 Talukas by Total Rainfall (Bar Chart) ---
+    st.markdown("---") # Separator for top 10
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
     df_top_10 = df.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
 
@@ -406,7 +436,6 @@ def show_24_hourly_dashboard(df, selected_date):
 
 # ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
-# CHANGE 1: Removed st.title("Gujarat Rainfall Dashboard")
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 # --- Date Selection on Top of the Page (Main Content Area) ---
@@ -466,7 +495,6 @@ with tab_daily:
     df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
 
     if not df_24hr.empty:
-        # Pass the 24-hour dataframe to the function that renders the daily dashboard components
         show_24_hourly_dashboard(df_24hr, selected_date)
     else:
         st.warning(f"⚠️ Daily data is not available for {selected_date_str}. Please check sheet name '24HR_Rainfall_{selected_month}_{selected_year}' and tab name 'master24hrs_{selected_date_str}'.")
@@ -527,39 +555,22 @@ with tab_hourly:
         df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
         top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
         num_talukas_with_rain_hourly = df_2hr[df_2hr['Total_mm'] > 0].shape[0]
-        more_than_150_hourly = df_2hr[df_2hr['Total_mm'] > 150].shape[0]
-        more_than_100_hourly = df_2hr[df_2hr['Total_mm'] > 100].shape[0]
-        more_than_50_hourly = df_2hr[df_2hr['Total_mm'] > 50].shape[0]
 
         st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
 
-        # CHANGE 2: Removed "### Overview (2-Hourly Data)" heading
+        # Removed "### Overview (2-Hourly Data)" heading (from previous confirmed change)
         row1 = st.columns(3)
-        row2 = st.columns(3)
+        # row2 (Talukas > X mm tiles) removed from here and moved to Daily Summary
 
         last_slot_label = slot_labels[existing_order[-1]]
 
-        # CHANGE 2: Removed "(Today)" suffix from tile labels
         row1_titles = [
             ("Total Talukas with Rainfall", num_talukas_with_rain_hourly),
             ("Top Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
             (f"Top Taluka in last 2 hour ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
         ]
 
-        # CHANGE 2: Removed "(Today)" suffix from tile labels
-        row2_titles = [
-            ("Talukas > 150 mm", more_than_150_hourly),
-            ("Talukas > 100 mm", more_than_100_hourly),
-            ("Talukas > 50 mm", more_than_50_hourly)
-        ]
-
         for col, (label, value) in zip(row1, row1_titles):
-            with col:
-                st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-                st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-        for col, (label, value) in zip(row2, row2_titles):
             with col:
                 st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
                 st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)

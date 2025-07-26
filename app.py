@@ -263,7 +263,8 @@ def show_24_hourly_dashboard(df, selected_date):
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Total Rainfall (Avg)</h4><h2>{state_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
+        # CHANGE 3: Update 1st tile title
+        st.markdown(f"<div class='metric-tile'><h4>State Rainfall in last 24 hours (Avg.)</h4><h2>{state_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col2:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -271,7 +272,8 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown("</div>", unsafe_allow_html=True)
     with col3:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>State Avg Percent Till Today</h4><h2>{percent_against_avg:.1f}%</h2></div>", unsafe_allow_html=True)
+        # CHANGE 3: Update 3rd tile title
+        st.markdown(f"<div class='metric-tile'><h4>State Avg Rainfall (%) Till Today</h4><h2>{percent_against_avg:.1f}%</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     # --- Rainfall Distribution Overview (Map and Insights - MOVED HERE) ---
@@ -404,9 +406,8 @@ def show_24_hourly_dashboard(df, selected_date):
 
 # ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
-st.title("Gujarat Rainfall Dashboard") # This title is overridden by CSS title-text below now
-
-st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True) # From reference code
+# CHANGE 1: Removed st.title("Gujarat Rainfall Dashboard")
+st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
 # --- Date Selection on Top of the Page (Main Content Area) ---
 st.markdown("---")
@@ -481,21 +482,16 @@ with tab_hourly:
         # --- Data Preprocessing for 2-hourly data ---
         df_2hr.columns = df_2hr.columns.str.strip()
 
-        # Identify time slot columns (e.g., '06TO08', '08TO10')
-        # Ensure only columns with 'TO' are considered rainfall data, not other potential numeric cols like 'Total' from raw sheet
-        time_slot_columns = [col for col in df_2hr.columns if "TO" in col and df_2hr[col].dtype in ['int64', 'float64', 'object']] # Check for 'object' to convert later
+        time_slot_columns = [col for col in df_2hr.columns if "TO" in col and df_2hr[col].dtype in ['int64', 'float64', 'object']]
         time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
                             '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
         existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
 
-        # Convert time slot columns to numeric, coercing errors
         for col in existing_order:
             df_2hr[col] = pd.to_numeric(df_2hr[col], errors="coerce")
 
-        # Calculate Total_mm for the day by summing 2-hourly columns for each Taluka
         df_2hr['Total_mm'] = df_2hr[existing_order].sum(axis=1)
 
-        # Melt data for plotting
         df_long = df_2hr.melt(
             id_vars=["District", "Taluka", "Total_mm"],
             value_vars=existing_order,
@@ -505,13 +501,11 @@ with tab_hourly:
         df_long = df_long.dropna(subset=["Rainfall (mm)"])
         df_long['Taluka'] = df_long['Taluka'].str.strip()
 
-        # Groupby and sum in case of duplicate Taluka/Time Slot entries
         df_long = df_long.groupby(["District", "Taluka", "Time Slot"], as_index=False).agg({
             "Rainfall (mm)": "sum",
             "Total_mm": "first"
         })
 
-        # Define slot labels and order
         slot_labels = {
             "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10TO12": "10–12 AM",
             "12TO14": "12–2 PM", "14TO16": "2–4 PM", "16TO18": "4–6 PM",
@@ -532,29 +526,31 @@ with tab_hourly:
         top_taluka_row = df_2hr.sort_values(by='Total_mm', ascending=False).iloc[0] if not df_2hr['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
         df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
         top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
-        num_talukas_with_rain_today_hourly = df_2hr[df_2hr['Total_mm'] > 0].shape[0] # Renamed for clarity in hourly tab
+        num_talukas_with_rain_hourly = df_2hr[df_2hr['Total_mm'] > 0].shape[0]
         more_than_150_hourly = df_2hr[df_2hr['Total_mm'] > 150].shape[0]
         more_than_100_hourly = df_2hr[df_2hr['Total_mm'] > 100].shape[0]
         more_than_50_hourly = df_2hr[df_2hr['Total_mm'] > 50].shape[0]
 
         st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
 
-        st.markdown("### Overview (2-Hourly Data)") # Added context to title
+        # CHANGE 2: Removed "### Overview (2-Hourly Data)" heading
         row1 = st.columns(3)
         row2 = st.columns(3)
 
         last_slot_label = slot_labels[existing_order[-1]]
 
+        # CHANGE 2: Removed "(Today)" suffix from tile labels
         row1_titles = [
-            ("Total Talukas with Rainfall (Today)", num_talukas_with_rain_today_hourly), # Adjusted label
-            ("Top Taluka by Total Rainfall (Today)", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"), # Adjusted label
-            (f"Top Taluka in last 2 hour({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
+            ("Total Talukas with Rainfall", num_talukas_with_rain_hourly),
+            ("Top Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
+            (f"Top Taluka in last 2 hour ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
         ]
 
+        # CHANGE 2: Removed "(Today)" suffix from tile labels
         row2_titles = [
-            ("Talukas > 150 mm (Today)", more_than_150_hourly),
-            ("Talukas > 100 mm (Today)", more_than_100_hourly),
-            ("Talukas > 50 mm (Today)", more_than_50_hourly)
+            ("Talukas > 150 mm", more_than_150_hourly),
+            ("Talukas > 100 mm", more_than_100_hourly),
+            ("Talukas > 50 mm", more_than_50_hourly)
         ]
 
         for col, (label, value) in zip(row1, row1_titles):

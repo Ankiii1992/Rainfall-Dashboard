@@ -22,7 +22,6 @@ def load_geojson(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
         return geojson_data
-    # No st.error here, let the calling function decide how to handle missing geojson if it's critical
     return None
 
 # ---------------------------- RAINFALL CATEGORY LOGIC ----------------------------
@@ -64,7 +63,7 @@ def generate_title_from_date(selected_date):
     end_date = selected_date.strftime("%d-%m-%Y")
     return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
 
-def load_sheet_data(sheet_name, tab_name): # Removed unused folder_name, year, month params
+def load_sheet_data(sheet_name, tab_name):
     try:
         client = get_gsheet_client()
         sheet = client.open(sheet_name).worksheet(tab_name)
@@ -72,7 +71,7 @@ def load_sheet_data(sheet_name, tab_name): # Removed unused folder_name, year, m
         df.columns = df.columns.str.strip()
         df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
         return df
-    except Exception: # Catch any exception silently
+    except Exception:
         return pd.DataFrame() # Return empty DataFrame on failure
 
 # --- plot_choropleth function ---
@@ -85,7 +84,7 @@ def plot_choropleth(df, geojson_path):
     if "Taluka" in df_plot.columns:
         df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
     else:
-        return go.Figure() # Return empty if no Taluka column
+        return go.Figure()
 
     df_plot["Rainfall_Category"] = df_plot["Rain_Last_24_Hrs"].apply(classify_rainfall)
 
@@ -152,7 +151,7 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Rain_Last_24_Hrs']} mm)</p></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col3:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+        st.markdown("<div classs='metric-container'>", unsafe_allow_html=True)
         st.markdown(f"<div class='metric-tile'><h4>State Avg Percent Till Today</h4><h2>{percent_against_avg:.1f}%</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -224,7 +223,7 @@ with tab_daily:
     sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_24hr = f"master24hrs_{selected_date_str}"
 
-    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr) # Simplified call
+    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
 
     if not df_24hr.empty:
         show_24_hourly_dashboard(df_24hr, selected_date)
@@ -234,9 +233,10 @@ with tab_daily:
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_2hr = f"master2hrs_{selected_date_str}"
+    # FIX: Corrected tab name prefix to match actual Google Sheet tab names
+    tab_name_2hr = f"2hrs_master_{selected_date_str}" 
 
-    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr) # Simplified call
+    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
 
     if not df_2hr.empty:
         st.subheader("Raw 2 Hourly Data")
@@ -248,4 +248,3 @@ with tab_hourly:
 with tab_historical:
     st.header("Historical Rainfall Data")
     st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
-   

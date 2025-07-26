@@ -278,9 +278,9 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown(f"<div class='metric-tile'><h4>State Avg Rainfall (%) Till Today</h4><h2>{percent_against_avg:.1f}%</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- NEW: Moved Talukas > X mm tiles to Daily Summary with new titles ---
+    # --- NEW: Moved Talukas > X mm tiles to Daily Summary without a specific section title ---
     st.markdown("---") # Separator for new metrics section
-    st.markdown("### 📊 Daily Rainfall Metrics") # New title for these tiles
+    # Removed: st.markdown("### 📊 Daily Rainfall Metrics") # Removed this line as requested
     col_daily_1, col_daily_2, col_daily_3 = st.columns(3)
 
     more_than_200_daily = df[df['Total_mm'] > 200].shape[0]

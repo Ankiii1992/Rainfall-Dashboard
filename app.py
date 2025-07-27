@@ -273,7 +273,7 @@ def show_24_hourly_dashboard(df, selected_date):
     # Define mapping for known district name discrepancies
     district_name_mapping = {
         "Chhota Udepur": "Chhota Udaipur",
-        "Dang": "Dangs",
+        "Dangs": "Dang",
         "Kachchh": "Kutch",
         "Mahesana": "Mehsana",
         # Add more mappings here if you discover other mismatches

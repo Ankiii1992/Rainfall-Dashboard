@@ -23,7 +23,7 @@ def load_geojson(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
         return geojson_data
-    st.error(f"GeoJSON file not found at: {path}") # Added specific error for missing file
+    st.error(f"GeoJSON file not found at: {path}")
     return None
 
 # --- NEW: Enhanced CSS (from reference code) ---
@@ -172,11 +172,10 @@ def load_sheet_data(sheet_name, tab_name):
         return pd.DataFrame() # Return empty DataFrame on failure
 
 # --- plot_choropleth function (for map that plots daily total) ---
-def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution by Taluka", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
+def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
     # This function is now made more generic to handle both talukas and districts
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
-        # st.error("GeoJSON data not available for plotting map.") # Error message moved to load_geojson
         return go.Figure()
 
     df_plot = df.copy()
@@ -190,7 +189,6 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution by Ta
 
     # The column for coloring the map should be 'Total_mm' (daily total for taluka)
     # or 'District_Avg_Rain_Last_24_Hrs' for district.
-    # We pass the 'color_column' explicitly now.
     color_column = None
     if 'Total_mm' in df_plot.columns: # For Talukas
         color_column = 'Total_mm'
@@ -215,8 +213,9 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution by Ta
     for feature in geojson_data["features"]:
         if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
             feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
-        elif geo_feature_id_key == "properties.DISTRICT" and "DISTRICT" in feature["properties"]:
-            feature["properties"]["DISTRICT"] = feature["properties"]["DISTRICT"].strip().lower()
+        # FIX APPLIED HERE: Changed 'DISTRICT' to 'district'
+        elif geo_feature_id_key == "properties.district" and "district" in feature["properties"]:
+            feature["properties"]["district"] = feature["properties"]["district"].strip().lower()
 
 
     fig = px.choropleth_mapbox(
@@ -300,7 +299,6 @@ def show_24_hourly_dashboard(df, selected_date):
 
     # --- NEW: Moved Talukas > X mm tiles to Daily Summary without a specific section title ---
     st.markdown("---") # Separator for new metrics section
-    # Removed: st.markdown("### 📊 Daily Rainfall Metrics") # Removed this line as requested
     col_daily_1, col_daily_2, col_daily_3 = st.columns(3)
 
     more_than_200_daily = df[df['Total_mm'] > 200].shape[0]
@@ -372,8 +370,8 @@ def show_24_hourly_dashboard(df, selected_date):
                     district_rainfall_avg_df,
                     "gujarat_district_clean.geojson",
                     title="Gujarat Daily Rainfall Distribution by District",
-                    geo_feature_id_key="properties.DISTRICT", # Key for district geojson
-                    geo_location_col="District" # Column in df for district names
+                    geo_feature_id_key="properties.district", # FIX APPLIED HERE: Changed from 'DISTRICT' to 'district'
+                    geo_location_col="District"
                 )
                 st.plotly_chart(fig_map_districts, use_container_width=True)
 

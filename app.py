@@ -23,6 +23,7 @@ def load_geojson(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
         return geojson_data
+    st.error(f"GeoJSON file not found at: {path}") # Added specific error for missing file
     return None
 
 # --- NEW: Enhanced CSS (from reference code) ---
@@ -164,58 +165,77 @@ def load_sheet_data(sheet_name, tab_name):
         if 'TOTAL' in df.columns:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
         else: # For 2-hourly data where 'TOTAL' might not be a direct column
-             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
+            df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
     except Exception as e:
         # st.error(f"Error loading data from sheet '{sheet_name}', tab '{tab_name}': {e}") # For debugging
         return pd.DataFrame() # Return empty DataFrame on failure
 
 # --- plot_choropleth function (for map that plots daily total) ---
-def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution by Taluka"):
+def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution by Taluka", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
+    # This function is now made more generic to handle both talukas and districts
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
-        st.error("GeoJSON data not available for plotting map.")
+        # st.error("GeoJSON data not available for plotting map.") # Error message moved to load_geojson
         return go.Figure()
 
     df_plot = df.copy()
-    if "Taluka" in df_plot.columns:
-        df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
-    else:
-        st.warning("Taluka column not found in data for map. Map will not display.")
-        return go.Figure()
 
-    # The column for coloring the map should be 'Total_mm' (daily total)
-    # Ensure 'Total_mm' exists and is numeric before classifying
-    if 'Total_mm' in df_plot.columns:
-        df_plot["Total_mm"] = pd.to_numeric(df_plot["Total_mm"], errors='coerce')
-        df_plot["Rainfall_Category"] = df_plot["Total_mm"].apply(classify_rainfall)
+    # Determine which column to use for feature linking and what to strip/lower
+    if geo_location_col == "Taluka":
+        df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
+    elif geo_location_col == "District":
+        df_plot["District"] = df_plot["District"].astype(str).str.strip().str.lower()
+
+
+    # The column for coloring the map should be 'Total_mm' (daily total for taluka)
+    # or 'District_Avg_Rain_Last_24_Hrs' for district.
+    # We pass the 'color_column' explicitly now.
+    color_column = None
+    if 'Total_mm' in df_plot.columns: # For Talukas
+        color_column = 'Total_mm'
+    elif 'District_Avg_Rain_Last_24_Hrs' in df_plot.columns: # For Districts
+        color_column = 'District_Avg_Rain_Last_24_Hrs'
+    else:
+        st.warning(f"Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization. Map may not display categories correctly.")
+        df_plot["Rainfall_Category"] = "No Rain" # Default if data is missing
+        color_column = "Rainfall_Category" # Use this dummy column for coloring
+
+
+    if color_column:
+        df_plot[color_column] = pd.to_numeric(df_plot[color_column], errors='coerce')
+        df_plot["Rainfall_Category"] = df_plot[color_column].apply(classify_rainfall)
         df_plot["Rainfall_Category"] = pd.Categorical(
             df_plot["Rainfall_Category"],
             categories=ordered_categories,
             ordered=True
         )
-    else:
-        # If Total_mm is missing, categorize based on a default or raise error
-        st.warning("'Total_mm' column not found for map categorization. Map may not display categories correctly.")
-        df_plot["Rainfall_Category"] = "No Rain" # Default category for map if data is missing
 
+    # Clean geojson properties for matching
     for feature in geojson_data["features"]:
-        if "SUB_DISTRICT" in feature["properties"]:
+        if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
             feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
+        elif geo_feature_id_key == "properties.DISTRICT" and "DISTRICT" in feature["properties"]:
+            feature["properties"]["DISTRICT"] = feature["properties"]["DISTRICT"].strip().lower()
+
 
     fig = px.choropleth_mapbox(
         df_plot,
         geojson=geojson_data,
-        featureidkey="properties.SUB_DISTRICT",
-        locations="Taluka",
+        featureidkey=geo_feature_id_key, # Dynamic key for Taluka or District
+        locations=geo_location_col,     # Dynamic column for Taluka or District
         color="Rainfall_Category",
         color_discrete_map=color_map,
         mapbox_style="open-street-map",
         zoom=6,
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
-        hover_name="Taluka",
-        hover_data={"Total_mm": ":.1f mm", "District": True, "Rainfall_Category":False}, # Show Total_mm in hover
+        hover_name=geo_location_col, # Use dynamic column for hover name
+        hover_data={
+            color_column: ":.1f mm", # Show actual rainfall value
+            "District": True if geo_location_col == "Taluka" else False, # Only show district for taluka map
+            "Rainfall_Category":False
+        },
         height=650,
         title=title
     )
@@ -300,39 +320,128 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown(f"<div class='metric-tile'><h4>Talukas > 50 mm</h4><h2>{more_than_50_daily}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- Rainfall Distribution Overview (Map and Insights) ---
+    # --- NEW CODE START: Rainfall Distribution Overview with Tabs ---
     st.markdown("---") # Separator for map section
     st.markdown("### 🗺️ Rainfall Distribution Overview")
 
+    # --- NEW: District Rainfall Aggregation ---
+    district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
+    district_rainfall_avg_df = district_rainfall_avg_df.rename(
+        columns={'Total_mm': 'District_Avg_Rain_Last_24_Hrs'}
+    )
+    # Apply rainfall classification to districts
+    district_rainfall_avg_df["Rainfall_Category"] = district_rainfall_avg_df["District_Avg_Rain_Last_24_Hrs"].apply(classify_rainfall)
+    district_rainfall_avg_df["Rainfall_Category"] = pd.Categorical(
+        district_rainfall_avg_df["Rainfall_Category"],
+        categories=ordered_categories,
+        ordered=True
+    )
+    district_rainfall_avg_df['Rainfall_Range'] = district_rainfall_avg_df['Rainfall_Category'].map(category_ranges)
+
+
+    # Prepare df_map for Talukas (existing logic)
+    df_map_talukas = df.copy()
+    df_map_talukas["Taluka"] = df_map_talukas["Taluka"].str.strip().str.lower()
+    df_map_talukas["Rainfall_Category"] = df_map_talukas["Total_mm"].apply(classify_rainfall)
+    df_map_talukas["Rainfall_Category"] = pd.Categorical(
+        df_map_talukas["Rainfall_Category"],
+        categories=ordered_categories,
+        ordered=True
+    )
+    df_map_talukas["Rainfall_Range"] = df_map_talukas["Rainfall_Category"].map(category_ranges)
+
+    # Load GeoJSON files
     taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
+    district_geojson = load_geojson("gujarat_district_clean.geojson")
 
-    if taluka_geojson:
-        # Prepare df_map (using df directly, no zones)
-        df_map = df.copy()
-        df_map["Taluka"] = df_map["Taluka"].str.strip().str.lower()
-        df_map["Rainfall Category"] = df_map["Total_mm"].apply(classify_rainfall)
-        df_map["Rainfall Category"] = pd.Categorical(
-            df_map["Rainfall Category"],
-            categories=ordered_categories,
-            ordered=True
-        )
-        df_map["Rainfall Range"] = df_map["Rainfall Category"].map(category_ranges)
 
-        map_col, insights_col = st.columns([0.5, 0.5])
+    if not taluka_geojson or not district_geojson:
+        st.error("Cannot display maps: One or both GeoJSON files not found or loaded correctly.")
+        return # Exit if essential geojson data is missing
 
-        with map_col:
+    tab_districts, tab_talukas = st.tabs(["Rainfall Distribution by Districts", "Rainfall Distribution by Talukas"])
+
+
+    with tab_districts:
+        map_col_dist, insights_col_dist = st.columns([0.5, 0.5])
+
+        with map_col_dist:
+            st.markdown("#### Gujarat Rainfall Map (by District)")
+            with st.spinner("Loading district map..."):
+                fig_map_districts = plot_choropleth(
+                    district_rainfall_avg_df,
+                    "gujarat_district_clean.geojson",
+                    title="Gujarat Daily Rainfall Distribution by District",
+                    geo_feature_id_key="properties.DISTRICT", # Key for district geojson
+                    geo_location_col="District" # Column in df for district names
+                )
+                st.plotly_chart(fig_map_districts, use_container_width=True)
+
+        with insights_col_dist:
+            st.markdown("#### Key Insights & Distributions (Districts)")
+
+            # --- Distribution of Districts by Rainfall Category (Bar Chart) ---
+            category_counts_dist = district_rainfall_avg_df['Rainfall_Category'].value_counts().reset_index()
+            category_counts_dist.columns = ['Category', 'Count']
+            category_counts_dist['Category'] = pd.Categorical(
+                category_counts_dist['Category'],
+                categories=ordered_categories,
+                ordered=True
+            )
+            category_counts_dist = category_counts_dist.sort_values('Category')
+            category_counts_dist['Rainfall_Range'] = category_counts_dist['Category'].map(category_ranges)
+
+
+            fig_category_dist_dist = px.bar(
+                category_counts_dist,
+                x='Category',
+                y='Count',
+                title='Distribution of Districts by Daily Rainfall Category',
+                labels={'Count': 'Number of Districts'},
+                color='Category',
+                color_discrete_map=color_map,
+                hover_data={
+                    'Category': True,
+                    'Rainfall_Range': True,
+                    'Count': True
+                }
+            )
+            fig_category_dist_dist.update_layout(
+                xaxis=dict(
+                    tickmode='array',
+                    tickvals=category_counts_dist['Category'],
+                    ticktext=[cat for cat in category_counts_dist['Category']],
+                    tickangle=0
+                ),
+                xaxis_title=None,
+                showlegend=False,
+                height=350,
+                margin=dict(l=0, r=0, t=50, b=0)
+            )
+            st.plotly_chart(fig_category_dist_dist, use_container_width=True)
+
+
+    with tab_talukas:
+        map_col_tal, insights_col_tal = st.columns([0.5, 0.5])
+
+        with map_col_tal:
             st.markdown("#### Gujarat Rainfall Map (by Taluka)")
-            # --- Applying st.spinner here ---
-            with st.spinner("Loading map..."):
-                fig_map = plot_choropleth(df_map, "gujarat_taluka_clean.geojson", "Gujarat Daily Rainfall Distribution by Taluka")
-                st.plotly_chart(fig_map, use_container_width=True)
+            with st.spinner("Loading taluka map..."):
+                fig_map_talukas = plot_choropleth(
+                    df_map_talukas,
+                    "gujarat_taluka_clean.geojson",
+                    title="Gujarat Daily Rainfall Distribution by Taluka",
+                    geo_feature_id_key="properties.SUB_DISTRICT", # Key for taluka geojson
+                    geo_location_col="Taluka" # Column in df for taluka names
+                )
+                st.plotly_chart(fig_map_talukas, use_container_width=True)
 
-        with insights_col:
-            st.markdown("#### Key Insights & Distributions")
+        with insights_col_tal:
+            st.markdown("#### Key Insights & Distributions (Talukas)")
 
-            # --- Pie Chart for Percentage of Talukas with Rainfall ---
+            # --- Pie Chart for Percentage of Talukas with Rainfall (EXISTING) ---
             TOTAL_TALUKAS_GUJARAT = 251 # Constant for total talukas
-            num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0] # Recalculate based on current df
+            num_talukas_with_rain_today = df_map_talukas[df_map_talukas['Total_mm'] > 0].shape[0]
             talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
 
             pie_data = pd.DataFrame({
@@ -355,20 +464,20 @@ def show_24_hourly_dashboard(df, selected_date):
             fig_pie.update_layout(showlegend=False, height=300, margin=dict(l=0, r=0, t=50, b=0))
             st.plotly_chart(fig_pie, use_container_width=True)
 
-            # --- Distribution of Talukas by Rainfall Category (Bar Chart) ---
-            category_counts = df_map['Rainfall Category'].value_counts().reset_index()
-            category_counts.columns = ['Category', 'Count']
-            category_counts['Category'] = pd.Categorical(
-                category_counts['Category'],
+            # --- Distribution of Talukas by Rainfall Category (Bar Chart - EXISTING) ---
+            category_counts_tal = df_map_talukas['Rainfall_Category'].value_counts().reset_index()
+            category_counts_tal.columns = ['Category', 'Count']
+            category_counts_tal['Category'] = pd.Categorical(
+                category_counts_tal['Category'],
                 categories=ordered_categories,
                 ordered=True
             )
-            category_counts = category_counts.sort_values('Category')
-            category_counts['Rainfall Range'] = category_counts['Category'].map(category_ranges)
+            category_counts_tal = category_counts_tal.sort_values('Category')
+            category_counts_tal['Rainfall_Range'] = category_counts_tal['Category'].map(category_ranges)
 
 
-            fig_category_dist = px.bar(
-                category_counts,
+            fig_category_dist_tal = px.bar(
+                category_counts_tal,
                 x='Category',
                 y='Count',
                 title='Distribution of Talukas by Daily Rainfall Category',
@@ -377,15 +486,15 @@ def show_24_hourly_dashboard(df, selected_date):
                 color_discrete_map=color_map,
                 hover_data={
                     'Category': True,
-                    'Rainfall Range': True,
+                    'Rainfall_Range': True,
                     'Count': True
                 }
             )
-            fig_category_dist.update_layout(
+            fig_category_dist_tal.update_layout(
                 xaxis=dict(
                     tickmode='array',
-                    tickvals=category_counts['Category'],
-                    ticktext=[cat for cat in category_counts['Category']],
+                    tickvals=category_counts_tal['Category'],
+                    ticktext=[cat for cat in category_counts_tal['Category']],
                     tickangle=0
                 ),
                 xaxis_title=None,
@@ -393,10 +502,10 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            st.plotly_chart(fig_category_dist, use_container_width=True)
+            st.plotly_chart(fig_category_dist_tal, use_container_width=True)
 
-    else:
-        st.error("❌ GeoJSON file (gujarat_taluka_clean.geojson) not found. Please ensure it's in the same directory as your app.")
+    # --- NEW CODE END: Rainfall Distribution Overview with Tabs ---
+
 
     # --- Top 10 Talukas by Total Rainfall (Bar Chart) ---
     st.markdown("---") # Separator for top 10

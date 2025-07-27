@@ -57,7 +57,7 @@ st.markdown("""
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -173,22 +173,16 @@ def load_sheet_data(sheet_name, tab_name):
 
 # --- plot_choropleth function (for map that plots daily total) ---
 def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
-    # This function is now made more generic to handle both talukas and districts
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
         return go.Figure()
 
     df_plot = df.copy()
 
-    # Determine which column to use for feature linking and what to strip/lower
-    if geo_location_col == "Taluka":
-        df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
-    elif geo_location_col == "District":
-        df_plot["District"] = df_plot["District"].astype(str).str.strip().str.lower()
+    # Consolidate and ensure the location column in df_plot is stripped and lowercased
+    # This is critical for matching with the processed geojson features
+    df_plot[geo_location_col] = df_plot[geo_location_col].astype(str).str.strip().str.lower()
 
-
-    # The column for coloring the map should be 'Total_mm' (daily total for taluka)
-    # or 'District_Avg_Rain_Last_24_Hrs' for district.
     color_column = None
     if 'Total_mm' in df_plot.columns: # For Talukas
         color_column = 'Total_mm'
@@ -196,9 +190,8 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
         color_column = 'District_Avg_Rain_Last_24_Hrs'
     else:
         st.warning(f"Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization. Map may not display categories correctly.")
-        df_plot["Rainfall_Category"] = "No Rain" # Default if data is missing
+        df_plot["Rainfall_Category"] = "No Rain"
         color_column = "Rainfall_Category"
-
 
     if color_column:
         df_plot[color_column] = pd.to_numeric(df_plot[color_column], errors='coerce')
@@ -210,6 +203,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
         )
 
     # Clean geojson properties for matching
+    # The feature["properties"][key] is also stripped and lowercased
     for feature in geojson_data["features"]:
         if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
             feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
@@ -220,19 +214,19 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     fig = px.choropleth_mapbox(
         df_plot,
         geojson=geojson_data,
-        featureidkey=geo_feature_id_key, # Dynamic key for Taluka or District
-        locations=geo_location_col,     # Dynamic column for Taluka or District
+        featureidkey=geo_feature_id_key,
+        locations=geo_location_col, # This column is already processed above
         color="Rainfall_Category",
         color_discrete_map=color_map,
         mapbox_style="open-street-map",
         zoom=6,
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
-        hover_name=geo_location_col, # Use dynamic column for hover name
+        hover_name=geo_location_col, # Use dynamic column for hover name, already lowercased here
         hover_data={
-            "District_Avg_Rain_Last_24_Hrs": ":.1f mm" if geo_location_col == "District" else False,
-            "Total_mm": ":.1f mm" if geo_location_col == "Taluka" else False,
-            "District": True if geo_location_col == "Taluka" else False,
+            "District_Avg_Rain_Last_24_Hrs": ":.1f mm" if geo_location_col == "District" else False, # Explicitly format for district map
+            "Total_mm": ":.1f mm" if geo_location_col == "Taluka" else False, # Explicitly format for taluka map
+            "District": True if geo_location_col == "Taluka" else False, # Only show district for taluka map
             "Rainfall_Category":False
         },
         height=650,
@@ -241,7 +235,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     fig.update_layout(
         margin={"r":0,"t":0,"l":0,"b":0},
         uirevision='true',
-        showlegend=True, # Ensure legend is shown for map
+        showlegend=True,
         legend=dict(
             orientation="h",
             yanchor="top",
@@ -332,7 +326,7 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown("</div>", unsafe_allow_html=True)
     with col_daily_3:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Talukas > 50 mm</h4><h2>{more_than_50_daily}</h2></div>", unsafe_allow_html=True)
+        st.markdown(f"<div classt='metric-tile'><h4>Talukas > 50 mm</h4><h2>{more_than_50_daily}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
@@ -352,7 +346,7 @@ def show_24_hourly_dashboard(df, selected_date):
 
 
     df_map_talukas = df.copy()
-    df_map_talukas["Taluka"] = df_map_talukas["Taluka"].str.strip().str.lower()
+    # Taluka name standardization will happen inside plot_choropleth for df_map_talukas[geo_location_col]
     df_map_talukas["Rainfall_Category"] = df_map_talukas["Total_mm"].apply(classify_rainfall)
     df_map_talukas["Rainfall_Category"] = pd.Categorical(
         df_map_talukas["Rainfall_Category"],

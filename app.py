@@ -230,8 +230,9 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
         opacity=0.75,
         hover_name=geo_location_col, # Use dynamic column for hover name
         hover_data={
-            color_column: ":.1f mm", # Show actual rainfall value
-            "District": True if geo_location_col == "Taluka" else False, # Only show district for taluka map
+            "District_Avg_Rain_Last_24_Hrs": ":.1f mm" if geo_location_col == "District" else False,
+            "Total_mm": ":.1f mm" if geo_location_col == "Taluka" else False,
+            "District": True if geo_location_col == "Taluka" else False,
             "Rainfall_Category":False
         },
         height=650,

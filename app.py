@@ -12,7 +12,7 @@ import io
 # ---------------------------- CONFIG & UTILITY ----------------------------
 @st.cache_resource
 def get_gsheet_client():
-    scope = ["https.googleapis.com/auth/spreadsheets", "https.googleapis.com/auth/drive"]
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     return gspread.authorize(creds)
@@ -171,6 +171,12 @@ def load_sheet_data(sheet_name, tab_name):
         else: # For 2-hourly data where 'TOTAL' might not be a direct column
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
+    except gspread.exceptions.SpreadsheetNotFound:
+        # st.warning(f"Spreadsheet not found: '{sheet_name}'") # For debugging
+        return pd.DataFrame()
+    except gspread.exceptions.WorksheetNotFound:
+        # st.warning(f"Worksheet not found: '{tab_name}' in spreadsheet '{sheet_name}'") # For debugging
+        return pd.DataFrame()
     except Exception as e:
         # st.error(f"Error loading data from sheet '{sheet_name}', tab '{tab_name}': {e}") # For debugging
         return pd.DataFrame() # Return empty DataFrame on failure
@@ -213,9 +219,9 @@ def plot_choropleth(df, geojson_data, title="Gujarat Rainfall Distribution", geo
 
     # Clean geojson properties for matching
     for feature in geojson_data["features"]:
-        if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
+        if "SUB_DISTRICT" in feature["properties"]:
             feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
-        elif geo_feature_id_key == "properties.district" and "district" in feature["properties"]:
+        if "district" in feature["properties"]:
             feature["properties"]["district"] = feature["properties"]["district"].strip().lower()
 
 
@@ -538,18 +544,47 @@ def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson
 
 # ---------------------------- CENTRALIZED DATA LOADING ----------------------------
 
-# We'll move the data loading logic here and add caching
 @st.cache_data(show_spinner="Fetching 24-hour rainfall data...")
-def get_daily_data(date_str, month, year):
-    sheet_name = f"24HR_Rainfall_{month}_{year}"
-    tab_name = f"master24hrs_{date_str}"
-    return load_sheet_data(sheet_name, tab_name)
+def get_daily_data(date_obj):
+    selected_year = date_obj.strftime("%Y")
+    selected_month_name = date_obj.strftime("%B")
+    selected_month_num = date_obj.strftime("%m")
+    selected_date_str = date_obj.strftime("%Y-%m-%d")
+
+    # Try different sheet name formats
+    sheet_name_options = [
+        f"24HR_Rainfall_{selected_month_name}_{selected_year}",
+        f"24HR_Rainfall_{selected_month_num}_{selected_year}",
+        # Add more options if needed
+    ]
+
+    for sheet_name in sheet_name_options:
+        df = load_sheet_data(sheet_name, f"master24hrs_{selected_date_str}")
+        if not df.empty:
+            return df
+    return pd.DataFrame()
+
 
 @st.cache_data(show_spinner="Fetching 2-hourly rainfall data...")
-def get_hourly_data(date_str, month, year):
-    sheet_name = f"2HR_Rainfall_{month}_{year}"
-    tab_name = f"2hrs_master_{date_str}"
-    return load_sheet_data(sheet_name, tab_name)
+def get_hourly_data(date_obj):
+    selected_year = date_obj.strftime("%Y")
+    selected_month_name = date_obj.strftime("%B")
+    selected_month_num = date_obj.strftime("%m")
+    selected_date_str = date_obj.strftime("%Y-%m-%d")
+
+    # Try different sheet name formats
+    sheet_name_options = [
+        f"2HR_Rainfall_{selected_month_name}_{selected_year}",
+        f"2HR_Rainfall_{selected_month_num}_{selected_year}",
+        # Add more options if needed
+    ]
+
+    for sheet_name in sheet_name_options:
+        df = load_sheet_data(sheet_name, f"2hrs_master_{selected_date_str}")
+        if not df.empty:
+            return df
+    return pd.DataFrame()
+
 
 # ---------------------------- MAIN UI FLOW ----------------------------
 st.set_page_config(layout="wide")
@@ -594,13 +629,9 @@ with col_next_btn:
 
 st.markdown("---")
 
-selected_year = selected_date.strftime("%Y")
-selected_month = selected_date.strftime("%B")
-selected_date_str = selected_date.strftime("%Y-%m-%d")
-
 # --- Call the centralized data loading functions here ---
-df_24hr = get_daily_data(selected_date_str, selected_month, selected_year)
-df_2hr = get_hourly_data(selected_date_str, selected_month, selected_year)
+df_24hr = get_daily_data(selected_date)
+df_2hr = get_hourly_data(selected_date)
 
 tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
 

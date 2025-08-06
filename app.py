@@ -784,11 +784,14 @@ with tab_daily:
 
     # Load the single DataFrame for the daily summary
     df_daily = load_sheet_data(sheet_name_daily, tab_name_daily)
+    # ADD THIS LINE HERE
+    st.write(df_daily.columns)
 
     if not df_daily.empty:
         show_24_hourly_dashboard(df_daily, selected_date)
     else:
         st.warning(f"⚠️ Daily data is not available for {selected_date_str}. Please check the sheet and tab names in your code.")
+        
 
 
 with tab_hourly:

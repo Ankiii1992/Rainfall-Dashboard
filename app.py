@@ -184,7 +184,6 @@ def load_sheet_data(sheet_name, tab_name):
         return pd.DataFrame()
 
 
-# --- CORRECTED get_zonal_data function ---
 def get_zonal_data(df):
     """
     Generates a zonal summary from a DataFrame that already contains all required columns.
@@ -194,7 +193,6 @@ def get_zonal_data(df):
     df.columns = df.columns.str.strip().str.replace(' ', '_').str.lower()
 
     # The required columns list is now lowercase with underscores
-    # CORRECTED: Using 'rain_last_24_hrs' based on your debug output
     required_cols_standardized = ['zone', 'avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']
     
     # Check for the standardized columns
@@ -207,7 +205,6 @@ def get_zonal_data(df):
     for col in required_cols_standardized[1:]: # Skip 'zone'
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # CORRECTED: Using 'rain_last_24_hrs' in groupby
     zonal_averages = df.groupby('zone')[['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']].mean().round(2)
     
     # Reorder the DataFrame according to our desired order
@@ -392,14 +389,12 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     return fig
 
 
-# --- CORRECTED show_24_hourly_dashboard function ---
 def show_24_hourly_dashboard(df_daily, selected_date):
     """
     Displays the full daily rainfall dashboard, including metrics,
     zonal summary, and maps.
     """
     
-    # We now assume the 'Rain_Last_24_Hrs' column is already present in the data
     required_cols_metrics = ["rain_last_24_hrs", "taluka", "district"]
     for col in required_cols_metrics:
         if col not in df_daily.columns:
@@ -476,21 +471,25 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     if not zonal_summary_averages.empty:
         col_table, col_chart = st.columns([1, 1])
         
-        # 'df_daily' is the standardized dataframe, so we need to rename some columns for 'generate_zonal_summary_table'
-        df_for_table = zonal_summary_averages.copy()
-        
-        # We also need a copy of the original DF with the correct column names for the table function
+        # We need a copy of the original DF with the correct column names for the table function
         df_daily_renamed_for_table = df_daily.rename(columns={
             'avg_rain': 'Avg_Rain', 'rain_till_yesterday': 'Rain_Till_Yesterday',
             'rain_last_24_hrs': 'Rain_Last_24_Hrs', 'total_rainfall': 'Total_Rainfall',
             'percent_against_avg': 'Percent_Against_Avg'
         })
         
-        zonal_summary_table_df = generate_zonal_summary_table(df_for_table, df_daily_renamed_for_table)
+        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df_daily_renamed_for_table)
 
         with col_table:
             st.markdown("#### Rainfall Averages by Zone")
-            st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=pd.Index([5])), use_container_width=True)
+            
+            # CORRECTED: Dynamically check the index for the 'State Avg.' row
+            if not zonal_summary_table_df.empty:
+                last_row_index = zonal_summary_table_df.index[-1]
+                st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=pd.Index([last_row_index])), use_container_width=True)
+            else:
+                st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
+
 
         with col_chart:
             st.markdown("#### Zonewise Rainfall vs. % Against Avg.")
@@ -806,8 +805,6 @@ with tab_hourly:
         for col in existing_order:
             df_2hr[col] = pd.to_numeric(df_2hr[col], errors="coerce")
 
-        # CORRECTED: Using 'rain_last_24_hrs' as the basis for total rainfall
-        # The 2-hourly data does not contain this column, so we must calculate it.
         if 'rain_last_24_hrs' not in df_2hr.columns:
             df_2hr['rain_last_24_hrs'] = df_2hr[existing_order].sum(axis=1)
 

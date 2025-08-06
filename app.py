@@ -174,20 +174,39 @@ def load_sheet_data(sheet_name, tab_name):
 # --- MODIFIED: RESTORED ZONAL SUMMARY FUNCTION ---
 # This function now expects the full DataFrame with 'Zone', 'Avg_Rain', etc.
 def get_zonal_data(df):
-    required_cols = ['Zone', 'Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']
+    st.info(f"Loaded DataFrame columns: {df.columns.tolist()}") # For debugging purposes
+
+    # Standardize column names for reliable lookup
+    df.columns = df.columns.str.strip().str.replace(' ', '_').str.lower()
+
+    # The required columns list is now lowercase with underscores
+    required_cols_standardized = ['zone', 'avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']
     
-    # Ensure all required columns are in the DataFrame and are numeric
-    for col in required_cols[1:]: # Skip 'Zone'
+    # Check for the standardized columns
+    for col in required_cols_standardized:
         if col not in df.columns:
-            st.error(f"Required column '{col}' not found in the data source. Please check your headers.")
+            st.error(f"Required column '{col}' not found in the data source after standardization. Please check your headers.")
             return pd.DataFrame()
+
+    # Convert columns to numeric, handling potential errors
+    for col in required_cols_standardized[1:]: # Skip 'zone'
         df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    zonal_averages = df.groupby('Zone')[['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']].mean().round(2)
+
+    zonal_averages = df.groupby('zone')[['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']].mean().round(2)
     
     # Reorder the DataFrame according to our desired order
-    new_order = ['KUTCH REGION', 'SAURASHTRA', 'NORTH GUJARAT', 'East-CENTRAL GUJARAT', 'SOUTH GUJARAT']
+    new_order = ['kutch region', 'saurashtra', 'north gujarat', 'east-central gujarat', 'south gujarat']
     final_results = zonal_averages.reindex(new_order).reset_index()
+    
+    # Revert column names to the original format for display
+    final_results = final_results.rename(columns={
+        'zone': 'Zone',
+        'avg_rain': 'Avg_Rain',
+        'rain_till_yesterday': 'Rain_Till_Yesterday',
+        'rain_last_24_hrs': 'Rain_Last_24_Hrs',
+        'total_rainfall': 'Total_Rainfall',
+        'percent_against_avg': 'Percent_Against_Avg'
+    })
 
     return final_results
 

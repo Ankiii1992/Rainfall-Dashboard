@@ -483,9 +483,9 @@ def show_24_hourly_dashboard(df_daily, selected_date):
         with col_table:
             st.markdown("#### Rainfall Averages by Zone")
             
-            # CORRECTED: Use a list containing the last row's index to be more robust
             if not zonal_summary_table_df.empty:
-                st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=[zonal_summary_table_df.index[-1]]), use_container_width=True)
+                # CORRECTED: Use a positional slice to select the last row, regardless of index labels
+                st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[-1:, :]), use_container_width=True)
             else:
                 st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
 

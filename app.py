@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import os
 import io
 
-# ---------------------------- CONFIG & UTILITY ----------------------------
+# ---------------------------- CONFIG ----------------------------
 @st.cache_resource
 def get_gsheet_client():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -25,15 +25,6 @@ def load_geojson(path):
         return geojson_data
     st.error(f"GeoJSON file not found at: {path}")
     return None
-
-# --- NEW: Load all GeoJSON files once at startup ---
-@st.cache_resource
-def load_all_geojson_files():
-    taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
-    district_geojson = load_geojson("gujarat_district_clean.geojson")
-    return taluka_geojson, district_geojson
-
-taluka_geojson_data, district_geojson_data = load_all_geojson_files()
 
 # --- NEW: Enhanced CSS (from reference code) ---
 st.markdown("""
@@ -66,7 +57,7 @@ st.markdown("""
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -84,6 +75,9 @@ st.markdown("""
         font-size: 0.95rem;
         color: #37474f;
     }
+
+    /* These CSS rules for the download button will likely NOT WORK if unsafe_allow_html=True */
+    /* does not permit direct injection of elements to hide Streamlit's native components */
     .stDataFrame header {
         display: none !important;
     }
@@ -93,7 +87,9 @@ st.markdown("""
     [data-testid="stDataFrameToolbar"] {
         display: none !important;
     }
+
 </style>
+
 <script>
     document.addEventListener('contextmenu', event => event.preventDefault());
 </script>
@@ -171,18 +167,60 @@ def load_sheet_data(sheet_name, tab_name):
         else: # For 2-hourly data where 'TOTAL' might not be a direct column
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
-    except gspread.exceptions.SpreadsheetNotFound:
-        # st.warning(f"Spreadsheet not found: '{sheet_name}'") # For debugging
-        return pd.DataFrame()
-    except gspread.exceptions.WorksheetNotFound:
-        # st.warning(f"Worksheet not found: '{tab_name}' in spreadsheet '{sheet_name}'") # For debugging
-        return pd.DataFrame()
     except Exception as e:
         # st.error(f"Error loading data from sheet '{sheet_name}', tab '{tab_name}': {e}") # For debugging
         return pd.DataFrame() # Return empty DataFrame on failure
 
+# --- NEW: ZONAL DATA PROCESSING FUNCTION ---
+# This function will read the data and perform all the necessary calculations
+def get_zonal_data(df):
+    # Use the provided dataframe instead of reading a file
+    # Standardize the zone names to ensure correct grouping
+    df['Zone'] = df['Zone'].str.replace('NORTH GUJARA T', 'NORTH GUJARAT').str.strip()
+
+    # Calculate the mean for the specified columns for each zone
+    zonal_averages = df.groupby('Zone')[['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall']].mean().round(2)
+
+    # Calculate the Zonal Percent_Against_Avg
+    df_percent = df.groupby('Zone').agg(
+        total_rainfall_sum=('Total_Rainfall', 'sum'),
+        avg_rain_sum=('Avg_Rain', 'sum')
+    )
+    zonal_averages['Percent_Against_Avg'] = (df_percent['total_rainfall_sum'] / df_percent['avg_rain_sum'] * 100).round(2)
+
+    # Reorder the DataFrame according to our desired order
+    new_order = ['KUTCH REGION', 'NORTH GUJARAT', 'East-CENTRAL GUJARAT', 'SAURASHTRA', 'SOUTH GUJARAT']
+    final_results = zonal_averages.reindex(new_order)
+    
+    return final_results
+
+# --- NEW: CHART GENERATION FUNCTION (Matplotlib for dual-axis) ---
+def create_dual_axis_chart(data):
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    # Bar chart for Total Rainfall
+    ax1.bar(data.index, data['Total_Rainfall'], color='skyblue', label='Total Rainfall (mm)')
+    ax1.set_xlabel('Zone', fontsize=12)
+    ax1.set_ylabel('Total Rainfall (mm)', color='skyblue', fontsize=12)
+    ax1.tick_params(axis='y', labelcolor='skyblue')
+
+    # Second Y-axis for the line plot
+    ax2 = ax1.twinx()
+    ax2.plot(data.index, data['Percent_Against_Avg'], color='red', marker='o', linestyle='-', linewidth=2, label='% Against Avg. Rain')
+    ax2.set_ylabel('% Against Avg. Rain', color='red', fontsize=12)
+    ax2.tick_params(axis='y', labelcolor='red')
+
+    # Add legend and title
+    fig.legend(loc="upper right", bbox_to_anchor=(1,1), bbox_transform=ax1.transAxes)
+    plt.title('Zonewise Rainfall Summary Chart', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    return fig
+
+
 # --- plot_choropleth function (for map that plots daily total) ---
-def plot_choropleth(df, geojson_data, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
+def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
+    # This function is now made more generic to handle both talukas and districts
+    geojson_data = load_geojson(geojson_path)
     if not geojson_data:
         return go.Figure()
 
@@ -219,9 +257,9 @@ def plot_choropleth(df, geojson_data, title="Gujarat Rainfall Distribution", geo
 
     # Clean geojson properties for matching
     for feature in geojson_data["features"]:
-        if "SUB_DISTRICT" in feature["properties"]:
+        if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
             feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
-        if "district" in feature["properties"]:
+        elif geo_feature_id_key == "properties.district" and "district" in feature["properties"]:
             feature["properties"]["district"] = feature["properties"]["district"].strip().lower()
 
 
@@ -264,7 +302,7 @@ def plot_choropleth(df, geojson_data, title="Gujarat Rainfall Distribution", geo
 
 
 # --- show_24_hourly_dashboard function (for Daily Summary tab - NOW INCLUDES ALL DAILY CHARTS) ---
-def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson):
+def show_24_hourly_dashboard(df, selected_date):
     # Rename 'Rain_Last_24_Hrs' to 'Total_mm' for consistency if it's the 24hr data source
     if "Rain_Last_24_Hrs" in df.columns:
         df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
@@ -278,14 +316,20 @@ def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson
     df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors='coerce')
 
     # --- NEW CODE START: District Name Standardization ---
+    # Define mapping for known district name discrepancies
     district_name_mapping = {
         "Chhota Udepur": "Chhota Udaipur",
         "Dangs": "Dang",
         "Kachchh": "Kutch",
         "Mahesana": "Mehsana",
+        # Add more mappings here if you discover other mismatches
     }
 
+    # Apply the mapping to the 'District' column
     df['District'] = df['District'].replace(district_name_mapping)
+
+    # Ensure consistent casing and stripping for matching with GeoJSON
+    # This also handles cases where a district name might just have leading/trailing spaces
     df['District'] = df['District'].astype(str).str.strip()
     # --- NEW CODE END: District Name Standardization ---
 
@@ -328,13 +372,37 @@ def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson
         st.markdown(f"<div class='metric-tile'><h4>Talukas > 200 mm</h4><h2>{more_than_200_daily}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col_daily_2:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+        st.markdown("<div classt class='metric-container'>", unsafe_allow_html=True)
         st.markdown(f"<div class='metric-tile'><h4>Talukas > 100 mm</h4><h2>{more_than_100_daily}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col_daily_3:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
         st.markdown(f"<div class='metric-tile'><h4>Talukas > 50 mm</h4><h2>{more_than_50_daily}</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # --- NEW: ZONAL SUMMARY SECTION ---
+    st.header("Zonewise Rainfall Summary")
+
+    # Call the zonal data processing function with the loaded DataFrame
+    zonal_data = get_zonal_data(df)
+
+    if zonal_data is not None:
+        # Create the two columns for the layout
+        col_table, col_chart = st.columns([1, 1])
+
+        with col_table:
+            st.subheader("Zonewise Rainfall Summary Table")
+            # Display the data table
+            st.dataframe(zonal_data)
+
+        with col_chart:
+            st.subheader("Zonewise Rainfall Summary Chart")
+            # Generate and display the dual-axis chart
+            fig = create_dual_axis_chart(zonal_data)
+            st.pyplot(fig)
+    # --- NEW: END ZONAL SUMMARY SECTION ---
 
     st.markdown("---")
     st.markdown("### 🗺️ Rainfall Distribution Overview")
@@ -362,6 +430,10 @@ def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson
     )
     df_map_talukas["Rainfall_Range"] = df_map_talukas["Rainfall_Category"].map(category_ranges)
 
+    taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
+    district_geojson = load_geojson("gujarat_district_clean.geojson")
+
+
     if not taluka_geojson or not district_geojson:
         st.error("Cannot display maps: One or both GeoJSON files not found or loaded correctly.")
         return
@@ -377,12 +449,12 @@ def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson
             with st.spinner("Loading district map..."):
                 fig_map_districts = plot_choropleth(
                     district_rainfall_avg_df,
-                    district_geojson,
+                    "gujarat_district_clean.geojson",
                     title="Gujarat Daily Rainfall Distribution by District",
                     geo_feature_id_key="properties.district",
                     geo_location_col="District"
                 )
-            st.plotly_chart(fig_map_districts, use_container_width=True)
+                st.plotly_chart(fig_map_districts, use_container_width=True)
 
         with insights_col_dist:
             st.markdown("#### Key Insights & Distributions (Districts)")
@@ -435,12 +507,12 @@ def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson
             with st.spinner("Loading taluka map..."):
                 fig_map_talukas = plot_choropleth(
                     df_map_talukas,
-                    taluka_geojson,
+                    "gujarat_taluka_clean.geojson",
                     title="Gujarat Daily Rainfall Distribution by Taluka",
                     geo_feature_id_key="properties.SUB_DISTRICT",
                     geo_location_col="Taluka"
                 )
-            st.plotly_chart(fig_map_talukas, use_container_width=True)
+                st.plotly_chart(fig_map_talukas, use_container_width=True)
 
         with insights_col_tal:
             st.markdown("#### Key Insights & Distributions (Talukas)")
@@ -541,54 +613,10 @@ def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
 
-
-# ---------------------------- CENTRALIZED DATA LOADING ----------------------------
-
-@st.cache_data(show_spinner="Fetching 24-hour rainfall data...")
-def get_daily_data(date_obj):
-    selected_year = date_obj.strftime("%Y")
-    selected_month_name = date_obj.strftime("%B")
-    selected_month_num = date_obj.strftime("%m")
-    selected_date_str = date_obj.strftime("%Y-%m-%d")
-
-    # Try different sheet name formats
-    sheet_name_options = [
-        f"24HR_Rainfall_{selected_month_name}_{selected_year}",
-        f"24HR_Rainfall_{selected_month_num}_{selected_year}",
-        # Add more options if needed
-    ]
-
-    for sheet_name in sheet_name_options:
-        df = load_sheet_data(sheet_name, f"master24hrs_{selected_date_str}")
-        if not df.empty:
-            return df
-    return pd.DataFrame()
-
-
-@st.cache_data(show_spinner="Fetching 2-hourly rainfall data...")
-def get_hourly_data(date_obj):
-    selected_year = date_obj.strftime("%Y")
-    selected_month_name = date_obj.strftime("%B")
-    selected_month_num = date_obj.strftime("%m")
-    selected_date_str = date_obj.strftime("%Y-%m-%d")
-
-    # Try different sheet name formats
-    sheet_name_options = [
-        f"2HR_Rainfall_{selected_month_name}_{selected_year}",
-        f"2HR_Rainfall_{selected_month_num}_{selected_year}",
-        # Add more options if needed
-    ]
-
-    for sheet_name in sheet_name_options:
-        df = load_sheet_data(sheet_name, f"2hrs_master_{selected_date_str}")
-        if not df.empty:
-            return df
-    return pd.DataFrame()
-
-
-# ---------------------------- MAIN UI FLOW ----------------------------
+# ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+
 st.markdown("---")
 st.subheader("🗓️ Select Date for Rainfall Data")
 
@@ -629,22 +657,32 @@ with col_next_btn:
 
 st.markdown("---")
 
-# --- Call the centralized data loading functions here ---
-df_24hr = get_daily_data(selected_date)
-df_2hr = get_hourly_data(selected_date)
+selected_year = selected_date.strftime("%Y")
+selected_month = selected_date.strftime("%B")
+selected_date_str = selected_date.strftime("%Y-%m-%d")
 
 tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
 
 with tab_daily:
     st.header("Daily Rainfall Summary")
+
+    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name_24hr = f"master24hrs_{selected_date_str}"
+
+    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
+
     if not df_24hr.empty:
-        # Pass the pre-loaded geojson data to the function
-        show_24_hourly_dashboard(df_24hr, selected_date, taluka_geojson_data, district_geojson_data)
+        show_24_hourly_dashboard(df_24hr, selected_date)
     else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}. Please select a different date.")
+        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
+    sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name_2hr = f"2hrs_master_{selected_date_str}"
+
+    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
+
     if not df_2hr.empty:
         df_2hr.columns = df_2hr.columns.str.strip()
 
@@ -673,7 +711,7 @@ with tab_hourly:
         })
 
         slot_labels = {
-            "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10TO12": "10–12 PM",
+            "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10TO12": "10–12 AM",
             "12TO14": "12–2 PM", "14TO16": "2–4 PM", "16TO18": "4–6 PM",
             "18TO20": "6–8 PM", "20TO22": "8–10 PM", "22TO24": "10–12 PM",
             "24TO02": "12–2 AM", "02TO04": "2–4 AM", "04TO06": "4–6 AM",
@@ -731,7 +769,7 @@ with tab_hourly:
             fig.update_layout(modebar_remove=['toImage'])
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Please select at least one Taluka to view the rainfall trend.") # Fixed indentation here
+            st.info("Please select at least one Taluka to view the rainfall trend.")
 
 
         st.markdown("### 📋 Full 2-Hourly Rainfall Data Table")
@@ -746,3 +784,6 @@ with tab_hourly:
 with tab_historical:
     st.header("Historical Rainfall Data")
     st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
+    
+if __name__ == "__main__":
+    main()

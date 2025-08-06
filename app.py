@@ -162,11 +162,9 @@ def load_sheet_data(sheet_name, tab_name):
         sheet = client.open(sheet_name).worksheet(tab_name)
         df = pd.DataFrame(sheet.get_all_records())
         df.columns = df.columns.str.strip()
-        # Ensure column names are consistent early - only rename if 'TOTAL' is present
+        # Rename 'TOTAL' to 'Total_mm' if present, for consistency
         if 'TOTAL' in df.columns:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
-        else: # For 2-hourly data where 'TOTAL' might not be a direct column
-            df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
     except Exception as e:
         # st.error(f"Error loading data from sheet '{sheet_name}', tab '{tab_name}': {e}") # For debugging
@@ -177,18 +175,15 @@ def load_sheet_data(sheet_name, tab_name):
 # This function now expects the full DataFrame with 'Zone', 'Avg_Rain', etc.
 def get_zonal_data(df):
     required_cols = ['Zone', 'Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']
-    for col in required_cols:
-        if col not in df.columns:
-            st.error(f"Required column '{col}' not found in the full data source for zonal summary. Please check your headers.")
-            return pd.DataFrame()
-
-    df_copy = df.copy()
-
-    # Convert columns to numeric, handling potential errors
+    
+    # Ensure all required columns are in the DataFrame and are numeric
     for col in required_cols[1:]: # Skip 'Zone'
-        df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
-
-    zonal_averages = df_copy.groupby('Zone')[['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']].mean().round(2)
+        if col not in df.columns:
+            st.error(f"Required column '{col}' not found in the data source. Please check your headers.")
+            return pd.DataFrame()
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    zonal_averages = df.groupby('Zone')[['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']].mean().round(2)
     
     # Reorder the DataFrame according to our desired order
     new_order = ['KUTCH REGION', 'SAURASHTRA', 'NORTH GUJARAT', 'East-CENTRAL GUJARAT', 'SOUTH GUJARAT']
@@ -235,19 +230,16 @@ def generate_zonal_summary_table(df_zonal_averages, df_full_data):
 
 # --- MODIFIED: RESTORED DUAL-AXIS CHART ---
 def create_zonal_dual_axis_chart(data):
-    # Exclude the State Avg. row from the chart data
-    chart_data = data[data['Zone'] != 'State Avg.']
-
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     # Bar chart for Total_Rainfall
     fig.add_trace(
         go.Bar(
-            x=chart_data['Zone'],
-            y=chart_data['Total_Rainfall'],
+            x=data['Zone'],
+            y=data['Total_Rainfall'],
             name='Total Rainfall (mm)',
             marker_color='rgb(100, 149, 237)',
-            text=chart_data['Total_Rainfall'],
+            text=data['Total_Rainfall'],
             textposition='inside',
         ),
         secondary_y=False,
@@ -256,13 +248,13 @@ def create_zonal_dual_axis_chart(data):
     # Line chart for Percent_Against_Avg
     fig.add_trace(
         go.Scatter(
-            x=chart_data['Zone'],
-            y=chart_data['Percent_Against_Avg'],
+            x=data['Zone'],
+            y=data['Percent_Against_Avg'],
             name='% Against Avg. Rainfall',
             mode='lines+markers+text',
             marker=dict(size=8, color='rgb(255, 165, 0)'),
             line=dict(color='rgb(255, 165, 0)'),
-            text=[f'{p:.1f}%' for p in chart_data['Percent_Against_Avg']],
+            text=[f'{p:.1f}%' for p in data['Percent_Against_Avg']],
             textposition='top center',
         ),
         secondary_y=True,
@@ -372,18 +364,20 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
 
 
 # --- show_24_hourly_dashboard function (for Daily Summary tab - NOW INCLUDES ALL DAILY CHARTS) ---
-def show_24_hourly_dashboard(df, df_full_data, selected_date):
-    # Rename 'Rain_Last_24_Hrs' to 'Total_mm' for consistency if it's the 24hr data source
-    if "Rain_Last_24_Hrs" in df.columns:
-        df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
+def show_24_hourly_dashboard(df_daily, selected_date):
+    # The 'Total_mm' column is derived from 'Rain_Last_24_Hrs' for consistency
+    if "Rain_Last_24_Hrs" in df_daily.columns:
+        df_daily.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
 
-    required_cols = ["Total_mm", "Taluka", "District"]
-    for col in required_cols:
-        if col not in df.columns:
-            st.error(f"Required column '{col}' not found in the loaded data. Please check your Google Sheet headers for 24-hour data.")
+    required_cols_metrics = ["Total_mm", "Taluka", "District"]
+    for col in required_cols_metrics:
+        if col not in df_daily.columns:
+            st.error(f"Required column '{col}' not found in the loaded data. Please check your Google Sheet headers for daily data.")
             return
 
-    df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors='coerce')
+    df_daily["Total_mm"] = pd.to_numeric(df_daily["Total_mm"], errors='coerce')
+    df_daily["Percent_Against_Avg"] = pd.to_numeric(df_daily["Percent_Against_Avg"], errors='coerce')
+
 
     # --- NEW CODE START: District Name Standardization ---
     # Define mapping for known district name discrepancies
@@ -396,25 +390,25 @@ def show_24_hourly_dashboard(df, df_full_data, selected_date):
     }
 
     # Apply the mapping to the 'District' column
-    df['District'] = df['District'].replace(district_name_mapping)
+    df_daily['District'] = df_daily['District'].replace(district_name_mapping)
 
     # Ensure consistent casing and stripping for matching with GeoJSON
     # This also handles cases where a district name might just have leading/trailing spaces
-    df['District'] = df['District'].astype(str).str.strip()
+    df_daily['District'] = df_daily['District'].astype(str).str.strip()
     # --- NEW CODE END: District Name Standardization ---
 
     title = generate_title_from_date(selected_date)
     st.subheader(title)
 
     # ---- Metrics ----
-    state_avg = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
-
-    if not df["Total_mm"].isnull().all() and not df.empty:
-        highest_taluka = df.loc[df["Total_mm"].idxmax()]
+    state_avg = df_daily["Total_mm"].mean() if not df_daily["Total_mm"].isnull().all() else 0.0
+    
+    if not df_daily["Total_mm"].isnull().all() and not df_daily.empty:
+        highest_taluka = df_daily.loc[df_daily["Total_mm"].idxmax()]
     else:
         highest_taluka = pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
-
-    percent_against_avg = df_full_data["Percent_Against_Avg"].mean() if "Percent_Against_Avg" in df_full_data.columns and not df_full_data["Percent_Against_Avg"].isnull().all() else 0.0
+    
+    percent_against_avg = df_daily["Percent_Against_Avg"].mean() if "Percent_Against_Avg" in df_daily.columns and not df_daily["Percent_Against_Avg"].isnull().all() else 0.0
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -426,16 +420,16 @@ def show_24_hourly_dashboard(df, df_full_data, selected_date):
         st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Total_mm']} mm)</p></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col3:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+        st.markdown("<div classt class='metric-container'>", unsafe_allow_html=True)
         st.markdown(f"<div class='metric-tile'><h4>State Avg Rainfall (%) Till Today</h4><h2>{percent_against_avg:.1f}%</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     
     st.markdown("---")
     col_daily_1, col_daily_2, col_daily_3 = st.columns(3)
 
-    more_than_200_daily = df[df['Total_mm'] > 200].shape[0]
-    more_than_100_daily = df[df['Total_mm'] > 100].shape[0]
-    more_than_50_daily = df[df['Total_mm'] > 50].shape[0]
+    more_than_200_daily = df_daily[df_daily['Total_mm'] > 200].shape[0]
+    more_than_100_daily = df_daily[df_daily['Total_mm'] > 100].shape[0]
+    more_than_50_daily = df_daily[df_daily['Total_mm'] > 50].shape[0]
 
     with col_daily_1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -455,15 +449,15 @@ def show_24_hourly_dashboard(df, df_full_data, selected_date):
     # --- MODIFIED: ZONAL SUMMARY SECTION ---
     st.header("Zonewise Rainfall (Average) Summary Table")
 
-    # Pass the full data source to the zonal summary function
-    zonal_summary_averages = get_zonal_data(df_full_data)
+    # Pass the daily data source to the zonal summary function
+    zonal_summary_averages = get_zonal_data(df_daily)
 
     if not zonal_summary_averages.empty:
         # Create the two columns for the layout
         col_table, col_chart = st.columns([1, 1])
         
         # Generate the formatted table with the state average row
-        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df_full_data)
+        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df_daily)
 
         with col_table:
             st.markdown("#### Rainfall Averages by Zone")
@@ -482,7 +476,7 @@ def show_24_hourly_dashboard(df, df_full_data, selected_date):
     st.markdown("---")
     st.markdown("### 🗺️ Rainfall Distribution Overview")
 
-    district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
+    district_rainfall_avg_df = df_daily.groupby('District')['Total_mm'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
         columns={'Total_mm': 'District_Avg_Rain_Last_24_Hrs'}
     )
@@ -495,7 +489,7 @@ def show_24_hourly_dashboard(df, df_full_data, selected_date):
     district_rainfall_avg_df['Rainfall_Range'] = district_rainfall_avg_df['Rainfall_Category'].map(category_ranges)
 
 
-    df_map_talukas = df.copy()
+    df_map_talukas = df_daily.copy()
     df_map_talukas["Taluka"] = df_map_talukas["Taluka"].str.strip().str.lower()
     df_map_talukas["Rainfall_Category"] = df_map_talukas["Total_mm"].apply(classify_rainfall)
     df_map_talukas["Rainfall_Category"] = pd.Categorical(
@@ -658,7 +652,7 @@ def show_24_hourly_dashboard(df, df_full_data, selected_date):
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
-    df_top_10 = df.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
+    df_top_10 = df_daily.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
 
     if not df_top_10.empty:
         fig_top_10 = px.bar(
@@ -684,7 +678,7 @@ def show_24_hourly_dashboard(df, df_full_data, selected_date):
         st.info("No rainfall data available to determine top 10 talukas.")
 
     st.subheader("📋 Full Daily Rainfall Data Table")
-    df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
+    df_display = df_daily.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
 
@@ -741,26 +735,17 @@ tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends
 with tab_daily:
     st.header("Daily Rainfall Summary")
 
-    # --- UPDATED: Data loading for both sources ---
-    # First, load the basic daily rainfall data for metrics and maps
-    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_24hr = f"master24hrs_{selected_date_str}"
-    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
-    
-    # Second, load the full data source for the zonal summary (this is the key change)
-    # >>> YOU MUST UPDATE THESE SHEET AND TAB NAMES TO MATCH YOUR DATA <<<
-    sheet_name_full = f"FULL_RAIN_SUMMARY_{selected_year}" # Example sheet name
-    tab_name_full = f"full_data_{selected_date_str}" # Example tab name
-    df_full_data = load_sheet_data(sheet_name_full, tab_name_full)
+    # --- UPDATED: Data loading for a single sheet (the daily data source) ---
+    sheet_name = f"24HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name = f"master24hrs_{selected_date_str}"
+    df_daily = load_sheet_data(sheet_name, tab_name)
 
-    if not df_24hr.empty and not df_full_data.empty:
-        # Pass both dataframes to the dashboard function
-        show_24_hourly_dashboard(df_24hr, df_full_data, selected_date)
+    if not df_daily.empty:
+        # Pass the single DataFrame to the dashboard function
+        show_24_hourly_dashboard(df_daily, selected_date)
     else:
-        if df_24hr.empty:
-            st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
-        if df_full_data.empty:
-             st.warning(f"⚠️ Full data for zonal summary is not available for {selected_date_str}.")
+        st.warning(f"⚠️ Daily data is not available for {selected_date_str}. Please check the sheet and tab names in your code.")
+
 
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")

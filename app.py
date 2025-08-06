@@ -483,13 +483,11 @@ def show_24_hourly_dashboard(df_daily, selected_date):
         with col_table:
             st.markdown("#### Rainfall Averages by Zone")
             
-            # CORRECTED: Dynamically check the index for the 'State Avg.' row
+            # CORRECTED: Use a slice of the index to be more robust
             if not zonal_summary_table_df.empty:
-                last_row_index = zonal_summary_table_df.index[-1]
-                st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=pd.Index([last_row_index])), use_container_width=True)
+                st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=zonal_summary_table_df.index[-1:]), use_container_width=True)
             else:
                 st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
-
 
         with col_chart:
             st.markdown("#### Zonewise Rainfall vs. % Against Avg.")

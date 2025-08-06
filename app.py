@@ -191,25 +191,24 @@ def get_zonal_data(df):
     It standardizes column names and handles data types.
     """
     # Standardize column names for reliable lookup
-    # This step is now redundant as load_sheet_data already does this, but kept for safety.
     df.columns = df.columns.str.strip().str.replace(' ', '_').str.lower()
 
     # The required columns list is now lowercase with underscores
-    # CORRECTED: Using 'total_mm' instead of 'rain_last_24_hrs' based on your data headers
-    required_cols_standardized = ['zone', 'avg_rain', 'rain_till_yesterday', 'total_mm', 'total_rainfall', 'percent_against_avg']
+    # CORRECTED: Using 'rain_last_24_hrs' based on your debug output
+    required_cols_standardized = ['zone', 'avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']
     
     # Check for the standardized columns
     for col in required_cols_standardized:
         if col not in df.columns:
-            st.error(f"Required column '{col}' not found in the data source after standardization. Please check your headers.")
+            st.error(f"Required column '{col}' not found in the data source. Please ensure your sheet headers are correctly formatted.")
             return pd.DataFrame()
 
     # Convert columns to numeric, handling potential errors
     for col in required_cols_standardized[1:]: # Skip 'zone'
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # CORRECTED: Using 'total_mm' in groupby
-    zonal_averages = df.groupby('zone')[['avg_rain', 'rain_till_yesterday', 'total_mm', 'total_rainfall', 'percent_against_avg']].mean().round(2)
+    # CORRECTED: Using 'rain_last_24_hrs' in groupby
+    zonal_averages = df.groupby('zone')[['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']].mean().round(2)
     
     # Reorder the DataFrame according to our desired order
     new_order = ['kutch region', 'saurashtra', 'north gujarat', 'east-central gujarat', 'south gujarat']
@@ -220,7 +219,7 @@ def get_zonal_data(df):
         'zone': 'Zone',
         'avg_rain': 'Avg_Rain',
         'rain_till_yesterday': 'Rain_Till_Yesterday',
-        'total_mm': 'Rain_Last_24_Hrs', # Re-name for display in the table
+        'rain_last_24_hrs': 'Rain_Last_24_Hrs',
         'total_rainfall': 'Total_Rainfall',
         'percent_against_avg': 'Percent_Against_Avg'
     })
@@ -330,12 +329,12 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     
     # Determine the column to be used for coloring the map
     color_column = None
-    if 'total_mm' in df_plot.columns:
-        color_column = 'total_mm'
+    if 'rain_last_24_hrs' in df_plot.columns:
+        color_column = 'rain_last_24_hrs'
     elif 'district_avg_rain_last_24_hrs' in df_plot.columns:
         color_column = 'district_avg_rain_last_24_hrs'
     else:
-        st.warning(f"Neither 'total_mm' nor 'district_avg_rain_last_24_hrs' found for map categorization.")
+        st.warning(f"Neither 'rain_last_24_hrs' nor 'district_avg_rain_last_24_hrs' found for map categorization.")
         df_plot["rainfall_category"] = "No Rain"
         color_column = "rainfall_category"
 
@@ -400,14 +399,14 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     zonal summary, and maps.
     """
     
-    # We now assume the 'Total_mm' column is already present in the data
-    required_cols_metrics = ["total_mm", "taluka", "district"]
+    # We now assume the 'Rain_Last_24_Hrs' column is already present in the data
+    required_cols_metrics = ["rain_last_24_hrs", "taluka", "district"]
     for col in required_cols_metrics:
         if col not in df_daily.columns:
             st.error(f"Required column '{col}' not found in the loaded data.")
             return
 
-    df_daily["total_mm"] = pd.to_numeric(df_daily["total_mm"], errors='coerce')
+    df_daily["rain_last_24_hrs"] = pd.to_numeric(df_daily["rain_last_24_hrs"], errors='coerce')
     df_daily["percent_against_avg"] = pd.to_numeric(df_daily["percent_against_avg"], errors='coerce')
 
     # District Name Standardization
@@ -424,12 +423,12 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     st.subheader(title)
 
     # ---- Metrics ----
-    state_avg = df_daily["total_mm"].mean() if not df_daily["total_mm"].isnull().all() else 0.0
+    state_avg = df_daily["rain_last_24_hrs"].mean() if not df_daily["rain_last_24_hrs"].isnull().all() else 0.0
     
-    if not df_daily["total_mm"].isnull().all() and not df_daily.empty:
-        highest_taluka = df_daily.loc[df_daily["total_mm"].idxmax()]
+    if not df_daily["rain_last_24_hrs"].isnull().all() and not df_daily.empty:
+        highest_taluka = df_daily.loc[df_daily["rain_last_24_hrs"].idxmax()]
     else:
-        highest_taluka = pd.Series({'taluka': 'N/A', 'total_mm': 0})
+        highest_taluka = pd.Series({'taluka': 'N/A', 'rain_last_24_hrs': 0})
     
     percent_against_avg = df_daily["percent_against_avg"].mean() if "percent_against_avg" in df_daily.columns and not df_daily["percent_against_avg"].isnull().all() else 0.0
 
@@ -440,7 +439,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
         st.markdown("</div>", unsafe_allow_html=True)
     with col2:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['taluka']}</h2><p>({highest_taluka['total_mm']} mm)</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['taluka']}</h2><p>({highest_taluka['rain_last_24_hrs']} mm)</p></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col3:
         st.markdown("<div classt class='metric-container'>", unsafe_allow_html=True)
@@ -450,9 +449,9 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     st.markdown("---")
     col_daily_1, col_daily_2, col_daily_3 = st.columns(3)
 
-    more_than_200_daily = df_daily[df_daily['total_mm'] > 200].shape[0]
-    more_than_100_daily = df_daily[df_daily['total_mm'] > 100].shape[0]
-    more_than_50_daily = df_daily[df_daily['total_mm'] > 50].shape[0]
+    more_than_200_daily = df_daily[df_daily['rain_last_24_hrs'] > 200].shape[0]
+    more_than_100_daily = df_daily[df_daily['rain_last_24_hrs'] > 100].shape[0]
+    more_than_50_daily = df_daily[df_daily['rain_last_24_hrs'] > 50].shape[0]
 
     with col_daily_1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -483,7 +482,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
         # We also need a copy of the original DF with the correct column names for the table function
         df_daily_renamed_for_table = df_daily.rename(columns={
             'avg_rain': 'Avg_Rain', 'rain_till_yesterday': 'Rain_Till_Yesterday',
-            'total_mm': 'Rain_Last_24_Hrs', 'total_rainfall': 'Total_Rainfall',
+            'rain_last_24_hrs': 'Rain_Last_24_Hrs', 'total_rainfall': 'Total_Rainfall',
             'percent_against_avg': 'Percent_Against_Avg'
         })
         
@@ -504,9 +503,9 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     st.markdown("---")
     st.markdown("### 🗺️ Rainfall Distribution Overview")
 
-    district_rainfall_avg_df = df_daily.groupby('district')['total_mm'].mean().reset_index()
+    district_rainfall_avg_df = df_daily.groupby('district')['rain_last_24_hrs'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
-        columns={'total_mm': 'district_avg_rain_last_24_hrs'}
+        columns={'rain_last_24_hrs': 'district_avg_rain_last_24_hrs'}
     )
     district_rainfall_avg_df["rainfall_category"] = district_rainfall_avg_df["district_avg_rain_last_24_hrs"].apply(classify_rainfall)
     district_rainfall_avg_df["rainfall_category"] = pd.Categorical(
@@ -519,7 +518,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
 
     df_map_talukas = df_daily.copy()
     df_map_talukas["taluka"] = df_map_talukas["taluka"].str.strip().str.lower()
-    df_map_talukas["rainfall_category"] = df_map_talukas["total_mm"].apply(classify_rainfall)
+    df_map_talukas["rainfall_category"] = df_map_talukas["rain_last_24_hrs"].apply(classify_rainfall)
     df_map_talukas["rainfall_category"] = pd.Categorical(
         df_map_talukas["rainfall_category"],
         categories=ordered_categories,
@@ -615,7 +614,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
             st.markdown("#### Key Insights & Distributions (Talukas)")
 
             TOTAL_TALUKAS_GUJARAT = 251
-            num_talukas_with_rain_today = df_map_talukas[df_map_talukas['total_mm'] > 0].shape[0]
+            num_talukas_with_rain_today = df_map_talukas[df_map_talukas['rain_last_24_hrs'] > 0].shape[0]
             talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
 
             pie_data = pd.DataFrame({
@@ -680,20 +679,20 @@ def show_24_hourly_dashboard(df_daily, selected_date):
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
-    df_top_10 = df_daily.dropna(subset=['total_mm']).sort_values(by='total_mm', ascending=False).head(10)
-    df_top_10 = df_top_10.rename(columns={'taluka': 'Taluka', 'total_mm': 'Total_mm'})
+    df_top_10 = df_daily.dropna(subset=['rain_last_24_hrs']).sort_values(by='rain_last_24_hrs', ascending=False).head(10)
+    df_top_10 = df_top_10.rename(columns={'taluka': 'Taluka', 'rain_last_24_hrs': 'Rain_Last_24_Hrs'})
 
     if not df_top_10.empty:
         fig_top_10 = px.bar(
             df_top_10,
             x='Taluka',
-            y='Total_mm',
-            color='Total_mm',
+            y='Rain_Last_24_Hrs',
+            color='Rain_Last_24_Hrs',
             color_continuous_scale=px.colors.sequential.Bluyl,
-            labels={'Total_mm': 'Total Rainfall (mm)'},
+            labels={'Rain_Last_24_Hrs': 'Rainfall (mm)'},
             hover_data=['district'],
-            text='Total_mm',
-            title='Top 10 Talukas with Highest Total Daily Rainfall'
+            text='Rain_Last_24_Hrs',
+            title='Top 10 Talukas with Highest Daily Rainfall'
         )
         fig_top_10.update_traces(texttemplate='%{text:.1f}', textposition='outside')
         fig_top_10.update_layout(
@@ -707,7 +706,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
         st.info("No rainfall data available to determine top 10 talukas.")
 
     st.subheader("📋 Full Daily Rainfall Data Table")
-    df_display = df_daily.sort_values(by="total_mm", ascending=False).reset_index(drop=True)
+    df_display = df_daily.sort_values(by="rain_last_24_hrs", ascending=False).reset_index(drop=True)
     df_display.index += 1
     # Rename columns for display to be more readable
     df_display = df_display.rename(columns={
@@ -716,7 +715,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
         'taluka': 'Taluka',
         'avg_rain': 'Avg_Rain',
         'rain_till_yesterday': 'Rain_Till_Yesterday',
-        'total_mm': 'Total_mm',
+        'rain_last_24_hrs': 'Rain_Last_24_Hrs',
         'total_rainfall': 'Total_Rainfall',
         'percent_against_avg': 'Percent_Against_Avg'
     })
@@ -784,14 +783,11 @@ with tab_daily:
 
     # Load the single DataFrame for the daily summary
     df_daily = load_sheet_data(sheet_name_daily, tab_name_daily)
-    # ADD THIS LINE HERE
-    st.write(df_daily.columns)
 
     if not df_daily.empty:
         show_24_hourly_dashboard(df_daily, selected_date)
     else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}. Please check the sheet and tab names in your code.")
-        
+        st.warning(f"⚠️ Daily data is not available for {selected_date_str}. Please ensure your sheet and tab names are correct.")
 
 
 with tab_hourly:
@@ -810,10 +806,13 @@ with tab_hourly:
         for col in existing_order:
             df_2hr[col] = pd.to_numeric(df_2hr[col], errors="coerce")
 
-        df_2hr['total_mm'] = df_2hr[existing_order].sum(axis=1)
+        # CORRECTED: Using 'rain_last_24_hrs' as the basis for total rainfall
+        # The 2-hourly data does not contain this column, so we must calculate it.
+        if 'rain_last_24_hrs' not in df_2hr.columns:
+            df_2hr['rain_last_24_hrs'] = df_2hr[existing_order].sum(axis=1)
 
         df_long = df_2hr.melt(
-            id_vars=["district", "taluka", "total_mm"],
+            id_vars=["district", "taluka", "rain_last_24_hrs"],
             value_vars=existing_order,
             var_name="time_slot",
             value_name="rainfall_mm"
@@ -823,7 +822,7 @@ with tab_hourly:
 
         df_long = df_long.groupby(["district", "taluka", "time_slot"], as_index=False).agg({
             "rainfall_mm": "sum",
-            "total_mm": "first"
+            "rain_last_24_hrs": "first"
         })
 
         slot_labels = {
@@ -840,12 +839,12 @@ with tab_hourly:
         df_long = df_long.sort_values(by=["taluka", "time_slot_label"])
 
 
-        df_2hr['total_mm'] = pd.to_numeric(df_2hr['total_mm'], errors='coerce')
+        df_2hr['rain_last_24_hrs'] = pd.to_numeric(df_2hr['rain_last_24_hrs'], errors='coerce')
 
-        top_taluka_row = df_2hr.sort_values(by='total_mm', ascending=False).iloc[0] if not df_2hr['total_mm'].dropna().empty else pd.Series({'taluka': 'N/A', 'total_mm': 0})
+        top_taluka_row = df_2hr.sort_values(by='rain_last_24_hrs', ascending=False).iloc[0] if not df_2hr['rain_last_24_hrs'].dropna().empty else pd.Series({'taluka': 'N/A', 'rain_last_24_hrs': 0})
         df_latest_slot = df_long[df_long['time_slot'] == existing_order[-1]]
         top_latest = df_latest_slot.sort_values(by='rainfall_mm', ascending=False).iloc[0] if not df_latest_slot['rainfall_mm'].dropna().empty else pd.Series({'taluka': 'N/A', 'rainfall_mm': 0})
-        num_talukas_with_rain_hourly = df_2hr[df_2hr['total_mm'] > 0].shape[0]
+        num_talukas_with_rain_hourly = df_2hr[df_2hr['rain_last_24_hrs'] > 0].shape[0]
 
         st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
 
@@ -855,7 +854,7 @@ with tab_hourly:
 
         row1_titles = [
             ("Total Talukas with Rainfall", num_talukas_with_rain_hourly),
-            ("Top Taluka by Total Rainfall", f"{top_taluka_row['taluka']}<br><p>{top_taluka_row['total_mm']:.1f} mm</p>"),
+            ("Top Taluka by Total Rainfall", f"{top_taluka_row['taluka']}<br><p>{top_taluka_row['rain_last_24_hrs']:.1f} mm</p>"),
             (f"Top Taluka in last 2 hour ({last_slot_label})", f"{top_latest['taluka']}<br><p>{top_latest['rainfall_mm']:.1f} mm</p>")
         ]
 
@@ -889,7 +888,7 @@ with tab_hourly:
 
 
         st.markdown("### 📋 Full 2-Hourly Rainfall Data Table")
-        df_display_2hr = df_2hr.sort_values(by="total_mm", ascending=False).reset_index(drop=True)
+        df_display_2hr = df_2hr.sort_values(by="rain_last_24_hrs", ascending=False).reset_index(drop=True)
         df_display_2hr.index += 1
         st.dataframe(df_display_2hr, use_container_width=True, height=600)
 

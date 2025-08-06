@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import gspread
 from google.oauth2.service_account import Credentials
 import json
@@ -172,79 +173,117 @@ def load_sheet_data(sheet_name, tab_name):
         return pd.DataFrame() # Return empty DataFrame on failure
 
 
-# --- MODIFIED: NEW ZONAL SUMMARY FUNCTION ---
-# This function calculates the zonal average based on the available 'Total_mm' column
-def get_zonal_summary(df):
-    # This is a crucial mapping. You must fill in all districts and their corresponding zones.
-    district_to_zone_mapping = {
-        'Kutch': 'KUTCH REGION',
-        'Rajkot': 'SAURASHTRA',
-        'Surendranagar': 'SAURASHTRA',
-        'Morbi': 'SAURASHTRA',
-        'Jamnagar': 'SAURASHTRA',
-        'Dwarka': 'SAURASHTRA',
-        'Porbandar': 'SAURASHTRA',
-        'Junagadh': 'SAURASHTRA',
-        'Gir Somnath': 'SAURASHTRA',
-        'Amreli': 'SAURASHTRA',
-        'Bhavnagar': 'SAURASHTRA',
-        'Botad': 'SAURASHTRA',
-        'Ahmedabad': 'NORTH GUJARAT', # Assuming Ahmedabad is North Gujarat for now
-        'Gandhinagar': 'NORTH GUJARAT',
-        'Mehsana': 'NORTH GUJARAT',
-        'Patan': 'NORTH GUJARAT',
-        'Banaskantha': 'NORTH GUJARAT',
-        'Sabarkantha': 'NORTH GUJARAT',
-        'Aravalli': 'NORTH GUJARAT',
-        'Vadodara': 'East-CENTRAL GUJARAT',
-        'Anand': 'East-CENTRAL GUJARAT',
-        'Kheda': 'East-CENTRAL GUJARAT',
-        'Panchmahal': 'East-CENTRAL GUJARAT',
-        'Dahod': 'East-CENTRAL GUJARAT',
-        'Mahisagar': 'East-CENTRAL GUJARAT',
-        'Chhota Udaipur': 'East-CENTRAL GUJARAT',
-        'Bharuch': 'SOUTH GUJARAT',
-        'Narmada': 'SOUTH GUJARAT',
-        'Surat': 'SOUTH GUJARAT',
-        'Tapi': 'SOUTH GUJARAT',
-        'Dang': 'SOUTH GUJARAT',
-        'Navsari': 'SOUTH GUJARAT',
-        'Valsad': 'SOUTH GUJARAT',
-        # Please add any other districts here and their corresponding zone
-    }
+# --- MODIFIED: RESTORED ZONAL SUMMARY FUNCTION ---
+# This function now expects the full DataFrame with 'Zone', 'Avg_Rain', etc.
+def get_zonal_data(df):
+    required_cols = ['Zone', 'Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']
+    for col in required_cols:
+        if col not in df.columns:
+            st.error(f"Required column '{col}' not found in the full data source for zonal summary. Please check your headers.")
+            return pd.DataFrame()
 
     df_copy = df.copy()
-    # Use the 'District' column to create a new 'Zone' column based on the mapping
-    df_copy['Zone'] = df_copy['District'].map(district_to_zone_mapping)
 
-    # Filter out any districts that were not in our mapping
-    df_copy.dropna(subset=['Zone'], inplace=True)
+    # Convert columns to numeric, handling potential errors
+    for col in required_cols[1:]: # Skip 'Zone'
+        df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
 
-    # Calculate the average rainfall per zone
-    zonal_summary = df_copy.groupby('Zone')['Total_mm'].mean().reset_index()
-    zonal_summary.rename(columns={'Total_mm': 'Average Daily Rainfall (mm)'}, inplace=True)
+    zonal_averages = df_copy.groupby('Zone')[['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']].mean().round(2)
     
     # Reorder the DataFrame according to our desired order
     new_order = ['KUTCH REGION', 'SAURASHTRA', 'NORTH GUJARAT', 'East-CENTRAL GUJARAT', 'SOUTH GUJARAT']
-    final_results = zonal_summary.set_index('Zone').reindex(new_order).reset_index()
-    
+    final_results = zonal_averages.reindex(new_order).reset_index()
+
     return final_results
 
-# --- MODIFIED: NEW CHART GENERATION FUNCTION (Simple bar chart) ---
-def create_zonal_bar_chart(data):
-    fig = px.bar(
-        data,
-        x='Zone',
-        y='Average Daily Rainfall (mm)',
-        color='Average Daily Rainfall (mm)',
-        color_continuous_scale=px.colors.sequential.YlGnBu,
-        title='Zonewise Average Daily Rainfall',
-        labels={'Average Daily Rainfall (mm)': 'Avg. Rainfall (mm)'},
-        text='Average Daily Rainfall (mm)'
+
+# --- NEW: Function to generate the summary table with State Avg ---
+def generate_zonal_summary_table(df_zonal_averages, df_full_data):
+    if df_zonal_averages.empty or df_full_data.empty:
+        return pd.DataFrame()
+
+    df_zonal_averages_copy = df_zonal_averages.copy()
+    
+    # Calculate state-wide averages from the full dataset
+    state_avg = df_full_data[['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']].mean().round(2)
+    
+    # Create a new DataFrame for the state average row
+    state_avg_row = pd.DataFrame([state_avg.to_dict()])
+    state_avg_row['Zone'] = 'State Avg.'
+    
+    # Concatenate the zonal averages with the state average row
+    final_table = pd.concat([df_zonal_averages_copy, state_avg_row], ignore_index=True)
+    
+    # Format the columns for display
+    final_table['Avg_Rain'] = final_table['Avg_Rain'].astype(str) + ' mm'
+    final_table['Rain_Till_Yesterday'] = final_table['Rain_Till_Yesterday'].astype(str) + ' mm'
+    final_table['Rain_Last_24_Hrs'] = final_table['Rain_Last_24_Hrs'].astype(str) + ' mm'
+    final_table['Total_Rainfall'] = final_table['Total_Rainfall'].astype(str) + ' mm'
+    final_table['Percent_Against_Avg'] = final_table['Percent_Against_Avg'].astype(str) + '%'
+    
+    # Rename columns for better display
+    final_table = final_table.rename(columns={
+        'Avg_Rain': 'Avg_Rain (mm)',
+        'Rain_Till_Yesterday': 'Rain_Till_Yesterday (mm)',
+        'Rain_Last_24_Hrs': 'Rain_Last_24_Hrs (mm)',
+        'Total_Rainfall': 'Total_Rainfall (mm)',
+        'Percent_Against_Avg': 'Percent_Against_Avg'
+    })
+    
+    return final_table
+
+
+# --- MODIFIED: RESTORED DUAL-AXIS CHART ---
+def create_zonal_dual_axis_chart(data):
+    # Exclude the State Avg. row from the chart data
+    chart_data = data[data['Zone'] != 'State Avg.']
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # Bar chart for Total_Rainfall
+    fig.add_trace(
+        go.Bar(
+            x=chart_data['Zone'],
+            y=chart_data['Total_Rainfall'],
+            name='Total Rainfall (mm)',
+            marker_color='rgb(100, 149, 237)',
+            text=chart_data['Total_Rainfall'],
+            textposition='inside',
+        ),
+        secondary_y=False,
     )
-    fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-    fig.update_layout(xaxis_title=None, yaxis_title="Avg. Rainfall (mm)")
-    fig.update_layout(height=400, margin=dict(l=0, r=0, t=50, b=0))
+    
+    # Line chart for Percent_Against_Avg
+    fig.add_trace(
+        go.Scatter(
+            x=chart_data['Zone'],
+            y=chart_data['Percent_Against_Avg'],
+            name='% Against Avg. Rainfall',
+            mode='lines+markers+text',
+            marker=dict(size=8, color='rgb(255, 165, 0)'),
+            line=dict(color='rgb(255, 165, 0)'),
+            text=[f'{p:.1f}%' for p in chart_data['Percent_Against_Avg']],
+            textposition='top center',
+        ),
+        secondary_y=True,
+    )
+    
+    fig.update_layout(
+        title_text='Zonewise Total Rainfall vs. % Against Average',
+        height=450,
+        margin=dict(l=0, r=0, t=50, b=0),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.3,
+            xanchor="center",
+            x=0.5
+        )
+    )
+    
+    fig.update_yaxes(title_text="Total Rainfall (mm)", secondary_y=False)
+    fig.update_yaxes(title_text="% Against Avg. Rainfall", secondary_y=True)
+    
     return fig
 
 
@@ -333,7 +372,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
 
 
 # --- show_24_hourly_dashboard function (for Daily Summary tab - NOW INCLUDES ALL DAILY CHARTS) ---
-def show_24_hourly_dashboard(df, selected_date):
+def show_24_hourly_dashboard(df, df_full_data, selected_date):
     # Rename 'Rain_Last_24_Hrs' to 'Total_mm' for consistency if it's the 24hr data source
     if "Rain_Last_24_Hrs" in df.columns:
         df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
@@ -375,7 +414,7 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         highest_taluka = pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
 
-    percent_against_avg = df["Percent_Against_Avg"].mean() if "Percent_Against_Avg" in df.columns and not df["Percent_Against_Avg"].isnull().all() else 0.0
+    percent_against_avg = df_full_data["Percent_Against_Avg"].mean() if "Percent_Against_Avg" in df_full_data.columns and not df_full_data["Percent_Against_Avg"].isnull().all() else 0.0
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -414,27 +453,30 @@ def show_24_hourly_dashboard(df, selected_date):
     st.markdown("---")
     
     # --- MODIFIED: ZONAL SUMMARY SECTION ---
-    st.header("Zonewise Rainfall Summary")
+    st.header("Zonewise Rainfall (Average) Summary Table")
 
-    # Call the new zonal summary function
-    zonal_summary_df = get_zonal_summary(df)
+    # Pass the full data source to the zonal summary function
+    zonal_summary_averages = get_zonal_data(df_full_data)
 
-    if zonal_summary_df is not None and not zonal_summary_df.empty:
+    if not zonal_summary_averages.empty:
         # Create the two columns for the layout
         col_table, col_chart = st.columns([1, 1])
+        
+        # Generate the formatted table with the state average row
+        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df_full_data)
 
         with col_table:
-            st.subheader("Zonewise Rainfall Summary Table")
+            st.markdown("#### Rainfall Averages by Zone")
             # Display the data table
-            st.dataframe(zonal_summary_df)
+            st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=pd.Index([5])), use_container_width=True)
 
         with col_chart:
-            st.subheader("Zonewise Rainfall Summary Chart")
-            # Generate and display the bar chart
-            fig = create_zonal_bar_chart(zonal_summary_df)
+            st.markdown("#### Zonewise Rainfall vs. % Against Avg.")
+            # Generate and display the dual-axis chart
+            fig = create_zonal_dual_axis_chart(zonal_summary_averages)
             st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("Could not generate Zonewise Summary. Please ensure your district-to-zone mapping is complete.")
+        st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
     # --- MODIFIED: END ZONAL SUMMARY SECTION ---
 
     st.markdown("---")
@@ -699,15 +741,26 @@ tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends
 with tab_daily:
     st.header("Daily Rainfall Summary")
 
+    # --- UPDATED: Data loading for both sources ---
+    # First, load the basic daily rainfall data for metrics and maps
     sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_24hr = f"master24hrs_{selected_date_str}"
-
     df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
+    
+    # Second, load the full data source for the zonal summary (this is the key change)
+    # >>> YOU MUST UPDATE THESE SHEET AND TAB NAMES TO MATCH YOUR DATA <<<
+    sheet_name_full = f"FULL_RAIN_SUMMARY_{selected_year}" # Example sheet name
+    tab_name_full = f"full_data_{selected_date_str}" # Example tab name
+    df_full_data = load_sheet_data(sheet_name_full, tab_name_full)
 
-    if not df_24hr.empty:
-        show_24_hourly_dashboard(df_24hr, selected_date)
+    if not df_24hr.empty and not df_full_data.empty:
+        # Pass both dataframes to the dashboard function
+        show_24_hourly_dashboard(df_24hr, df_full_data, selected_date)
     else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
+        if df_24hr.empty:
+            st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
+        if df_full_data.empty:
+             st.warning(f"⚠️ Full data for zonal summary is not available for {selected_date_str}.")
 
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
@@ -817,6 +870,3 @@ with tab_hourly:
 with tab_historical:
     st.header("Historical Rainfall Data")
     st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
-    
-if __name__ == "__main__":
-    main()

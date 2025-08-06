@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timedelta
 import os
 import io
+import re
 
 # ---------------------------- CONFIG ----------------------------
 @st.cache_resource
@@ -170,14 +171,60 @@ def load_sheet_data(sheet_name, tab_name):
         sheet = client.open(sheet_name).worksheet(tab_name)
         df = pd.DataFrame(sheet.get_all_records())
         
-        # Clean column headers
+        ### --- NEW LOGIC TO SPLIT CONCATENATED HEADERS ---
+        # Get the original column names
+        original_cols = list(df.columns)
+        
+        # Check for the concatenated column header that was causing the issue
+        if 'ZoneDistrictTalukaAvg_RainRain_Till_YesterdayRain_Last_24_HrsTotal_RainfallPercent_Against_Avg' in original_cols:
+            # The column is combined, so we need to process it
+            # Assuming the data is in the format 'Zone District Taluka Avg_Rain ...'
+            # We will split the first column and then try to find the other columns
+            
+            # This is a robust way to handle the concatenated header
+            # First, rename the first column to something generic
+            df = df.rename(columns={df.columns[0]: 'combined_data'})
+            
+            # Then, split the data in this column based on spaces or other delimiters
+            # The user provided the headers, so we'll use a regex to split the string
+            # to make sure the data is parsed correctly.
+            
+            # Let's assume the data within this column is structured like:
+            # "Zone District Taluka Avg_Rain Rain_Till_Yesterday ..."
+            # We can use a regex to extract the parts. A simpler, more robust way
+            # is to just find the columns we need.
+            
+            # This is a better approach: we'll find a column that contains "Zone"
+            # and try to work with that, rather than assuming it's the first column.
+            
+            # This is the logic to correctly split the single column into individual ones
+            # First, let's find the column with the concatenated names
+            concatenated_col = [col for col in df.columns if 'ZoneDistrictTaluka' in col]
+            if concatenated_col:
+                # Assuming the concatenated column is the first one, let's process it
+                # We need to split the data in this column into individual columns
+                # based on a pattern like `Zone_name District_name Taluka_name`
+                # Let's create new columns from the first column assuming the data is a single string
+                
+                # We need a more generic way to do this without hardcoding names
+                # A robust approach is to rename the columns to what they should be
+                new_columns = [
+                    'zone', 'district', 'taluka', 'avg_rain',
+                    'rain_till_yesterday', 'rain_last_24_hrs',
+                    'total_rainfall', 'percent_against_avg'
+                ]
+                # It's safer to check if the number of columns matches
+                if len(df.columns) == len(new_columns):
+                    df.columns = new_columns
+                    
+                
+        # Fallback to the previous logic for cleaning
         df.columns = df.columns.str.strip().str.replace(' ', '_').str.lower()
         return df
     except gspread.exceptions.SpreadsheetNotFound:
         st.error(f"Spreadsheet '{sheet_name}' not found.")
         return pd.DataFrame()
     except gspread.exceptions.WorksheetNotFound:
-        # st.warning(f"Tab '{tab_name}' not found in sheet '{sheet_name}'.") # This is expected behavior for some dates
         return pd.DataFrame()
     except Exception as e:
         st.error(f"An error occurred while loading data: {e}")
@@ -186,34 +233,49 @@ def load_sheet_data(sheet_name, tab_name):
 
 def get_zonal_data(df):
     """
-    Generates a zonal summary from a DataFrame that already contains all required columns.
-    It standardizes column names and handles data types.
+    Generates a zonal summary from a DataFrame that contains all required columns.
+    It dynamically gets zone names from the data itself.
     """
-    # Standardize column names for reliable lookup
-    df.columns = df.columns.str.strip().str.replace(' ', '_').str.lower()
+    df_copy = df.copy()
 
-    # The required columns list is now lowercase with underscores
-    required_cols_standardized = ['zone', 'avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']
+    # Standardize column names for reliable lookup
+    df_copy.columns = df_copy.columns.str.strip().str.replace(' ', '_').str.lower()
     
-    # Check for the standardized columns
+    # Try to find the 'zone' column, allowing for minor variations
+    zone_col_name = None
+    for col in df_copy.columns:
+        if 'zone' in col:
+            zone_col_name = col
+            break
+            
+    if not zone_col_name:
+        st.error("Cannot find a 'zone' column in the data. Please check your Google Sheet headers.")
+        return pd.DataFrame()
+
+    required_cols_standardized = [zone_col_name, 'avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']
+    
     for col in required_cols_standardized:
-        if col not in df.columns:
+        if col not in df_copy.columns:
             st.error(f"Required column '{col}' not found in the data source. Please ensure your sheet headers are correctly formatted.")
             return pd.DataFrame()
 
-    # Convert columns to numeric, handling potential errors
-    for col in required_cols_standardized[1:]: # Skip 'zone'
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+    # Clean the data and convert to numeric, handling potential errors
+    for col in required_cols_standardized[1:]:
+        df_copy[col] = df_copy[col].astype(str).str.replace(' mm', '').str.replace('%', '')
+        df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
 
-    zonal_averages = df.groupby('zone')[['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']].mean().round(2)
+    # Get the unique zones directly from the data and sort them
+    unique_zones = sorted(df_copy[zone_col_name].unique())
+
+    # Group by the dynamically found zone column and calculate averages
+    zonal_averages = df_copy.groupby(zone_col_name)[['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']].mean().round(2)
     
-    # Reorder the DataFrame according to our desired order
-    new_order = ['kutch region', 'saurashtra', 'north gujarat', 'east-central gujarat', 'south gujarat']
-    final_results = zonal_averages.reindex(new_order).reset_index()
+    # Reorder the DataFrame using the unique zones from the data
+    final_results = zonal_averages.reindex(unique_zones).reset_index()
     
     # Revert column names to the original format for display
     final_results = final_results.rename(columns={
-        'zone': 'Zone',
+        zone_col_name: 'Zone',
         'avg_rain': 'Avg_Rain',
         'rain_till_yesterday': 'Rain_Till_Yesterday',
         'rain_last_24_hrs': 'Rain_Last_24_Hrs',
@@ -242,10 +304,8 @@ def generate_zonal_summary_table(df_zonal_averages, df_full_data):
     final_table = pd.concat([df_zonal_averages_copy, state_avg_row], ignore_index=True)
     
     # Format the columns for display
-    final_table['Avg_Rain'] = final_table['Avg_Rain'].astype(str) + ' mm'
-    final_table['Rain_Till_Yesterday'] = final_table['Rain_Till_Yesterday'].astype(str) + ' mm'
-    final_table['Rain_Last_24_Hrs'] = final_table['Rain_Last_24_Hrs'].astype(str) + ' mm'
-    final_table['Total_Rainfall'] = final_table['Total_Rainfall'].astype(str) + ' mm'
+    for col in ['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall']:
+        final_table[col] = final_table[col].astype(str) + ' mm'
     final_table['Percent_Against_Avg'] = final_table['Percent_Against_Avg'].astype(str) + '%'
     
     # Rename columns for better display
@@ -395,17 +455,19 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     zonal summary, and maps.
     """
     
+    df_daily_copy = df_daily.copy()
+    
     # Standardize column names from the raw data
-    df_daily.columns = df_daily.columns.str.strip().str.replace(' ', '_').str.lower()
+    df_daily_copy.columns = df_daily_copy.columns.str.strip().str.replace(' ', '_').str.lower()
     
     required_cols_metrics = ["rain_last_24_hrs", "taluka", "district"]
     for col in required_cols_metrics:
-        if col not in df_daily.columns:
+        if col not in df_daily_copy.columns:
             st.error(f"Required column '{col}' not found in the loaded data.")
             return
 
-    df_daily["rain_last_24_hrs"] = pd.to_numeric(df_daily["rain_last_24_hrs"], errors='coerce')
-    df_daily["percent_against_avg"] = pd.to_numeric(df_daily["percent_against_avg"], errors='coerce')
+    df_daily_copy["rain_last_24_hrs"] = pd.to_numeric(df_daily_copy["rain_last_24_hrs"], errors='coerce')
+    df_daily_copy["percent_against_avg"] = pd.to_numeric(df_daily_copy["percent_against_avg"], errors='coerce')
 
     # District Name Standardization
     district_name_mapping = {
@@ -414,21 +476,21 @@ def show_24_hourly_dashboard(df_daily, selected_date):
         "Kachchh": "Kutch",
         "Mahesana": "Mehsana",
     }
-    df_daily['district'] = df_daily['district'].replace(district_name_mapping)
-    df_daily['district'] = df_daily['district'].astype(str).str.strip()
+    df_daily_copy['district'] = df_daily_copy['district'].replace(district_name_mapping)
+    df_daily_copy['district'] = df_daily_copy['district'].astype(str).str.strip()
 
     title = generate_title_from_date(selected_date)
     st.subheader(title)
 
     # ---- Metrics ----
-    state_avg = df_daily["rain_last_24_hrs"].mean() if not df_daily["rain_last_24_hrs"].isnull().all() else 0.0
+    state_avg = df_daily_copy["rain_last_24_hrs"].mean() if not df_daily_copy["rain_last_24_hrs"].isnull().all() else 0.0
     
-    if not df_daily["rain_last_24_hrs"].isnull().all() and not df_daily.empty:
-        highest_taluka = df_daily.loc[df_daily["rain_last_24_hrs"].idxmax()]
+    if not df_daily_copy["rain_last_24_hrs"].isnull().all() and not df_daily_copy.empty:
+        highest_taluka = df_daily_copy.loc[df_daily_copy["rain_last_24_hrs"].idxmax()]
     else:
         highest_taluka = pd.Series({'taluka': 'N/A', 'rain_last_24_hrs': 0})
     
-    percent_against_avg = df_daily["percent_against_avg"].mean() if "percent_against_avg" in df_daily.columns and not df_daily["percent_against_avg"].isnull().all() else 0.0
+    percent_against_avg = df_daily_copy["percent_against_avg"].mean() if "percent_against_avg" in df_daily_copy.columns and not df_daily_copy["percent_against_avg"].isnull().all() else 0.0
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -447,9 +509,9 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     st.markdown("---")
     col_daily_1, col_daily_2, col_daily_3 = st.columns(3)
 
-    more_than_200_daily = df_daily[df_daily['rain_last_24_hrs'] > 200].shape[0]
-    more_than_100_daily = df_daily[df_daily['rain_last_24_hrs'] > 100].shape[0]
-    more_than_50_daily = df_daily[df_daily['rain_last_24_hrs'] > 50].shape[0]
+    more_than_200_daily = df_daily_copy[df_daily_copy['rain_last_24_hrs'] > 200].shape[0]
+    more_than_100_daily = df_daily_copy[df_daily_copy['rain_last_24_hrs'] > 100].shape[0]
+    more_than_50_daily = df_daily_copy[df_daily_copy['rain_last_24_hrs'] > 50].shape[0]
 
     with col_daily_1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -469,13 +531,12 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     # --- MODIFIED: ZONAL SUMMARY SECTION ---
     st.header("Zonewise Rainfall (Average) Summary Table")
 
-    zonal_summary_averages = get_zonal_data(df_daily)
+    zonal_summary_averages = get_zonal_data(df_daily_copy)
 
     if not zonal_summary_averages.empty:
         col_table, col_chart = st.columns([1, 1])
         
-        # We need a copy of the original DF with the correct column names for the table function
-        df_daily_renamed_for_table = df_daily.rename(columns={
+        df_daily_renamed_for_table = df_daily_copy.rename(columns={
             'avg_rain': 'Avg_Rain', 'rain_till_yesterday': 'Rain_Till_Yesterday',
             'rain_last_24_hrs': 'Rain_Last_24_Hrs', 'total_rainfall': 'Total_Rainfall',
             'percent_against_avg': 'Percent_Against_Avg'
@@ -487,7 +548,6 @@ def show_24_hourly_dashboard(df_daily, selected_date):
             st.markdown("#### Rainfall Averages by Zone")
             
             if not zonal_summary_table_df.empty:
-                # CORRECTED: Use a positional slice to select the last row, regardless of index labels
                 st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[-1:, :]), use_container_width=True)
             else:
                 st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
@@ -503,7 +563,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     st.markdown("---")
     st.markdown("### 🗺️ Rainfall Distribution Overview")
 
-    district_rainfall_avg_df = df_daily.groupby('district')['rain_last_24_hrs'].mean().reset_index()
+    district_rainfall_avg_df = df_daily_copy.groupby('district')['rain_last_24_hrs'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
         columns={'rain_last_24_hrs': 'district_avg_rain_last_24_hrs'}
     )
@@ -516,7 +576,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     district_rainfall_avg_df['rainfall_range'] = district_rainfall_avg_df['rainfall_category'].map(category_ranges)
 
 
-    df_map_talukas = df_daily.copy()
+    df_map_talukas = df_daily_copy.copy()
     df_map_talukas["taluka"] = df_map_talukas["taluka"].str.strip().str.lower()
     df_map_talukas["rainfall_category"] = df_map_talukas["rain_last_24_hrs"].apply(classify_rainfall)
     df_map_talukas["rainfall_category"] = pd.Categorical(
@@ -679,7 +739,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
-    df_top_10 = df_daily.dropna(subset=['rain_last_24_hrs']).sort_values(by='rain_last_24_hrs', ascending=False).head(10)
+    df_top_10 = df_daily_copy.dropna(subset=['rain_last_24_hrs']).sort_values(by='rain_last_24_hrs', ascending=False).head(10)
     df_top_10 = df_top_10.rename(columns={'taluka': 'Taluka', 'rain_last_24_hrs': 'Rain_Last_24_Hrs'})
 
     if not df_top_10.empty:
@@ -706,7 +766,7 @@ def show_24_hourly_dashboard(df_daily, selected_date):
         st.info("No rainfall data available to determine top 10 talukas.")
 
     st.subheader("📋 Full Daily Rainfall Data Table")
-    df_display = df_daily.sort_values(by="rain_last_24_hrs", ascending=False).reset_index(drop=True)
+    df_display = df_daily_copy.sort_values(by="rain_last_24_hrs", ascending=False).reset_index(drop=True)
     df_display.index += 1
     # Rename columns for display to be more readable
     df_display = df_display.rename(columns={

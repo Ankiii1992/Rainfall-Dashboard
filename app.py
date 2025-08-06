@@ -395,6 +395,9 @@ def show_24_hourly_dashboard(df_daily, selected_date):
     zonal summary, and maps.
     """
     
+    # Standardize column names from the raw data
+    df_daily.columns = df_daily.columns.str.strip().str.replace(' ', '_').str.lower()
+    
     required_cols_metrics = ["rain_last_24_hrs", "taluka", "district"]
     for col in required_cols_metrics:
         if col not in df_daily.columns:

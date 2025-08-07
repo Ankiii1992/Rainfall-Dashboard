@@ -191,6 +191,8 @@ def get_zonal_data(df):
     It dynamically gets zone names from the data itself.
     """
     df_copy = df.copy()
+    # --- ADD THIS NEW LINE TO FIX ZONE TYPOS ---
+    df_copy['zone'] = df_copy['zone'].str.strip().str.upper().str.replace('GUJARA T', 'GUJARAT')
 
     # --- NEW LOGIC FOR FLEXIBLE COLUMN MATCHING ---
     # Define a mapping from the standardized required name to the column found in the DF

@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timedelta
 import os
 import io
-import altair as alt # Added for the dual-axis chart
+import altair as alt
 
 # ---------------------------- CONFIG & UTILITY ----------------------------
 @st.cache_resource
@@ -313,7 +313,7 @@ def show_24_hourly_dashboard(df, selected_date, taluka_geojson, district_geojson
         st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Total_mm']} mm)</p></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col3:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+        st.markdown("<div classt='metric-container'>", unsafe_allow_html=True)
         st.markdown(f"<div class='metric-tile'><h4>State Avg Rainfall (%) Till Today</h4><h2>{percent_against_avg:.1f}%</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -790,7 +790,7 @@ with tab_hourly:
             fig.update_layout(modebar_remove=['toImage'])
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Please select at least one Taluka to view the rainfall trend.") # Fixed indentation here
+            st.info("Please select at least one Taluka to view the rainfall trend.")
 
 
         st.markdown("### 📋 Full 2-Hourly Rainfall Data Table")

@@ -537,21 +537,26 @@ def show_24_hourly_dashboard(df, selected_date):
 
     st.markdown("---")
 
-    # --- NEW: ZONAL SUMMARY SECTION ---
+    # --- MODIFIED: ZONAL SUMMARY SECTION (to match user's logic) ---
     st.header("Zonewise Rainfall (Average) Summary Table")
     
-    df_daily_for_zonal = df.copy()
-    
-    # We rename columns to lowercase for the user-provided get_zonal_data logic
-    df_daily_for_zonal.columns = [col.strip().lower() for col in df_daily_for_zonal.columns]
+    # Create a copy for the zonal summary logic
+    df_daily_copy = df.copy()
 
-    zonal_summary_averages = get_zonal_data(df_daily_for_zonal)
+    zonal_summary_averages = get_zonal_data(df_daily_copy)
 
     if not zonal_summary_averages.empty:
         col_table, col_chart = st.columns([1, 1])
         
-        # --- FIXED: Passing both DataFrames as required by the user's logic ---
-        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df)
+        # Rename a copy of the dataframe to be used for state average calculation
+        # as per the user's logic
+        df_daily_renamed_for_table = df_daily_copy.rename(columns={
+            'avg_rain': 'Avg_Rain', 'rain_till_yesterday': 'Rain_Till_Yesterday',
+            'rain_last_24_hrs': 'Rain_Last_24_Hrs', 'total_rainfall': 'Total_Rainfall',
+            'percent_against_avg': 'Percent_Against_Avg'
+        })
+        
+        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df_daily_renamed_for_table)
 
         with col_table:
             st.markdown("#### Rainfall Averages by Zone")
@@ -567,7 +572,7 @@ def show_24_hourly_dashboard(df, selected_date):
             st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
-    # --- END ZONAL SUMMARY SECTION ---
+    # --- MODIFIED: END ZONAL SUMMARY SECTION ---
 
     st.markdown("---")
     st.markdown("### 🗺️ Rainfall Distribution Overview")

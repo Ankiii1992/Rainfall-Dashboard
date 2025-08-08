@@ -211,10 +211,12 @@ def get_zonal_data(df):
     df_copy.columns = [col.strip() for col in df_copy.columns]
     
     # Define the required columns we need for the zonal summary
+    # --- FIXED: Added 'rain_last_24_hrs' here ---
     required_cols_map = {
         'zone': 'zone',
         'avg_rain': 'avg_rain',
         'rain_till_yesterday': 'rain_till_yesterday',
+        'rain_last_24_hrs': 'rain_last_24_hrs',
         'total_rainfall': 'total_rainfall',
         'percent_against_avg': 'percent_against_avg',
     }
@@ -224,7 +226,7 @@ def get_zonal_data(df):
     for internal_name in required_cols_map.keys():
         found_col = find_column_with_fuzzy_match(df_copy.columns, internal_name)
         if found_col is None:
-            # st.error(f"Required column '{internal_name}' not found in the data source. Skipping zonal summary.")
+            st.error(f"Required column for '{internal_name}' not found in the data source. Skipping zonal summary.")
             return pd.DataFrame()
         found_cols[internal_name] = found_col
 
@@ -246,6 +248,7 @@ def get_zonal_data(df):
 
     # Group by the dynamically found zone column and calculate averages
     zonal_averages = df_copy.groupby('zone')[
+        # These columns are now guaranteed to exist because they were just renamed
         ['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']
     ].mean().round(2)
     
@@ -254,35 +257,39 @@ def get_zonal_data(df):
     
     return final_results
 
-def generate_zonal_summary_table(df_zonal_averages, df_full_data):
+def generate_zonal_summary_table(df_zonal_averages):
     """Generates a formatted table with zonal averages and a state-wide average row."""
-    if df_zonal_averages.empty or df_full_data.empty:
+    if df_zonal_averages.empty:
         return pd.DataFrame()
 
     df_zonal_averages_copy = df_zonal_averages.copy()
     
-    # Calculate state-wide averages from the full dataset
-    state_avg = df_full_data[['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']].mean().round(2)
+    # Calculate state-wide averages from the zonal averages
+    # --- FIXED: Calculating state_avg from the zonal_averages DataFrame itself ---
+    state_avg = df_zonal_averages_copy[[
+        'avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg'
+    ]].mean().round(2)
     
     # Create a new DataFrame for the state average row
     state_avg_row = pd.DataFrame([state_avg.to_dict()])
-    state_avg_row['Zone'] = 'State Avg.'
+    state_avg_row['zone'] = 'State Avg.'
     
     # Concatenate the zonal averages with the state average row
     final_table = pd.concat([df_zonal_averages_copy, state_avg_row], ignore_index=True)
     
     # Format the columns for display
-    for col in ['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall']:
+    for col in ['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall']:
         final_table[col] = final_table[col].astype(str) + ' mm'
-    final_table['Percent_Against_Avg'] = final_table['Percent_Against_Avg'].astype(str) + '%'
+    final_table['percent_against_avg'] = final_table['percent_against_avg'].astype(str) + '%'
     
     # Rename columns for better display
     final_table = final_table.rename(columns={
-        'Avg_Rain': 'Avg_Rain (mm)',
-        'Rain_Till_Yesterday': 'Rain_Till_Yesterday (mm)',
-        'Rain_Last_24_Hrs': 'Rain_Last_24_Hrs (mm)',
-        'Total_Rainfall': 'Total_Rainfall (mm)',
-        'Percent_Against_Avg': 'Percent_Against_Avg'
+        'zone': 'Zone',
+        'avg_rain': 'Avg_Rain (mm)',
+        'rain_till_yesterday': 'Rain_Till_Yesterday (mm)',
+        'rain_last_24_hrs': 'Rain_Last_24_Hrs (mm)',
+        'total_rainfall': 'Total_Rainfall (mm)',
+        'percent_against_avg': 'Percent_Against_Avg'
     })
     
     return final_table
@@ -290,15 +297,16 @@ def generate_zonal_summary_table(df_zonal_averages, df_full_data):
 
 def create_zonal_dual_axis_chart(data):
     """Creates a dual-axis chart for zonal rainfall."""
+    # --- FIXED: Using standardized column names from get_zonal_data output ---
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     fig.add_trace(
         go.Bar(
-            x=data['Zone'],
-            y=data['Total_Rainfall'],
+            x=data['zone'],
+            y=data['total_rainfall'],
             name='Total Rainfall (mm)',
             marker_color='rgb(100, 149, 237)',
-            text=data['Total_Rainfall'],
+            text=data['total_rainfall'],
             textposition='inside',
         ),
         secondary_y=False,
@@ -306,13 +314,13 @@ def create_zonal_dual_axis_chart(data):
     
     fig.add_trace(
         go.Scatter(
-            x=data['Zone'],
-            y=data['Percent_Against_Avg'],
+            x=data['zone'],
+            y=data['percent_against_avg'],
             name='% Against Avg. Rainfall',
             mode='lines+markers+text',
             marker=dict(size=8, color='rgb(255, 165, 0)'),
             line=dict(color='rgb(255, 165, 0)'),
-            text=[f'{p:.1f}%' for p in data['Percent_Against_Avg']],
+            text=[f'{p:.1f}%' for p in data['percent_against_avg']],
             textposition='top center',
         ),
         secondary_y=True,
@@ -512,25 +520,15 @@ def show_24_hourly_dashboard(df, selected_date):
 
     # The column names in the full data must be consistent with what the zonal summary expects
     # Here, we rename the existing columns to match the expected names before passing the data
-    df_daily_for_zonal = df_daily_for_zonal.rename(columns={'Total_mm': 'Rain_Last_24_Hrs'})
+    df_daily_for_zonal = df_daily_for_zonal.rename(columns={'Total_mm': 'rain_last_24_hrs'})
     
     zonal_summary_averages = get_zonal_data(df_daily_for_zonal)
 
     if not zonal_summary_averages.empty:
         col_table, col_chart = st.columns([1, 1])
         
-        # We need to rename columns in the main dataframe to match the format expected by the zonal table function
-        # This is the corrected line to ensure the right columns exist
-        df_full_data_for_table = zonal_summary_averages.rename(columns={
-            'zone': 'Zone', 
-            'avg_rain': 'Avg_Rain', 
-            'rain_till_yesterday': 'Rain_Till_Yesterday',
-            'rain_last_24_hrs': 'Rain_Last_24_Hrs', 
-            'total_rainfall': 'Total_Rainfall',
-            'percent_against_avg': 'Percent_Against_Avg'
-        })
-        
-        zonal_summary_table_df = generate_zonal_summary_table(df_full_data_for_table, df_full_data_for_table)
+        # --- FIXED: Passing only the zonal averages DataFrame ---
+        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages)
 
         with col_table:
             st.markdown("#### Rainfall Averages by Zone")

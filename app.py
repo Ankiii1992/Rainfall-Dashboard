@@ -191,7 +191,7 @@ def find_column_with_fuzzy_match(df_columns, pattern):
     allowing for spaces and case-insensitivity.
     """
     # Create a regex pattern that is case-insensitive and ignores spaces
-    regex_pattern = f"^{re.escape(pattern.replace(' ', ''))}$"
+    regex_pattern = re.compile(f"^{re.escape(pattern.replace(' ', ''))}$", re.IGNORECASE)
     
     # Iterate through the columns and test for a match
     for col in df_columns:
@@ -212,41 +212,41 @@ def get_zonal_data(df):
     
     # Define the required columns we need for the zonal summary
     required_cols_map = {
-        'Zone': 'zone',
-        'Avg_Rain': 'avg_rain',
-        'Rain_Till_Yesterday': 'rain_till_yesterday',
-        'Total_Rainfall': 'total_rainfall',
-        'Percent_Against_Avg': 'percent_against_avg',
+        'zone': 'zone',
+        'avg_rain': 'avg_rain',
+        'rain_till_yesterday': 'rain_till_yesterday',
+        'total_rainfall': 'total_rainfall',
+        'percent_against_avg': 'percent_against_avg',
     }
     
     # Find the actual column names in the DataFrame using fuzzy matching
     found_cols = {}
-    for display_name, internal_name in required_cols_map.items():
+    for internal_name in required_cols_map.keys():
         found_col = find_column_with_fuzzy_match(df_copy.columns, internal_name)
         if found_col is None:
-            st.error(f"Required column '{internal_name}' not found in the data source. Please check your sheet headers.")
+            # st.error(f"Required column '{internal_name}' not found in the data source. Skipping zonal summary.")
             return pd.DataFrame()
-        found_cols[display_name] = found_col
+        found_cols[internal_name] = found_col
 
     # Rename the columns to a consistent format for internal processing
     df_copy = df_copy.rename(columns={v: k for k, v in found_cols.items()})
 
     # --- ADD THIS NEW LINE TO FIX ZONE TYPOS ---
-    if 'Zone' in df_copy.columns:
-        df_copy['Zone'] = df_copy['Zone'].str.strip().str.upper().str.replace('GUJARA T', 'GUJARAT')
+    if 'zone' in df_copy.columns:
+        df_copy['zone'] = df_copy['zone'].str.strip().str.upper().str.replace('GUJARA T', 'GUJARAT')
 
     # Clean the data and convert to numeric, handling potential errors
-    for col in ['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']:
+    for col in required_cols_map.keys():
         if col in df_copy.columns:
             df_copy[col] = df_copy[col].astype(str).str.replace(' mm', '').str.replace('%', '')
             df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
 
     # Get the unique zones directly from the data and sort them
-    unique_zones = sorted(df_copy['Zone'].unique())
+    unique_zones = sorted(df_copy['zone'].unique())
 
     # Group by the dynamically found zone column and calculate averages
-    zonal_averages = df_copy.groupby('Zone')[
-        ['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']
+    zonal_averages = df_copy.groupby('zone')[
+        ['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']
     ].mean().round(2)
     
     # Reorder the DataFrame using the unique zones from the data
@@ -520,13 +520,17 @@ def show_24_hourly_dashboard(df, selected_date):
         col_table, col_chart = st.columns([1, 1])
         
         # We need to rename columns in the main dataframe to match the format expected by the zonal table function
-        df_daily_renamed_for_table = df_daily_for_zonal.rename(columns={
-            'Avg_Rain': 'Avg_Rain', 'Rain_Till_Yesterday': 'Rain_Till_Yesterday',
-            'Rain_Last_24_Hrs': 'Total_mm', 'Total_Rainfall': 'Total_Rainfall',
-            'Percent_Against_Avg': 'Percent_Against_Avg'
+        # This is the corrected line to ensure the right columns exist
+        df_full_data_for_table = zonal_summary_averages.rename(columns={
+            'zone': 'Zone', 
+            'avg_rain': 'Avg_Rain', 
+            'rain_till_yesterday': 'Rain_Till_Yesterday',
+            'rain_last_24_hrs': 'Rain_Last_24_Hrs', 
+            'total_rainfall': 'Total_Rainfall',
+            'percent_against_avg': 'Percent_Against_Avg'
         })
         
-        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df_daily_renamed_for_table)
+        zonal_summary_table_df = generate_zonal_summary_table(df_full_data_for_table, df_full_data_for_table)
 
         with col_table:
             st.markdown("#### Rainfall Averages by Zone")

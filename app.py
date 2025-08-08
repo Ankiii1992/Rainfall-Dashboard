@@ -12,12 +12,13 @@ import io
 import re
 
 # ---------------------------- CONFIG ----------------------------
+# ---------------------------- CONFIG ----------------------------
 @st.cache_resource
 def get_gsheet_client():
-     """
+    """
     Establishes a connection to Google Sheets using service account credentials.
     The credentials should be stored in Streamlit secrets.
-     """
+    """
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     try:
         creds_dict = st.secrets["gcp_service_account"]

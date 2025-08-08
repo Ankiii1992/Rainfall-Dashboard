@@ -536,45 +536,37 @@ def show_24_hourly_dashboard(df, selected_date):
 
     st.markdown("---")
 
-    # --- MODIFIED: ZONAL SUMMARY SECTION (to match user's logic) ---
-    st.header("Zonewise Rainfall (Average) Summary Table")
-    
-    # NEW: Load the zonal data from the separate sheet
-    df_zonal_data = load_zonal_sheet_data(selected_date)
-    
-    if not df_zonal_data.empty:
-        zonal_summary_averages = get_zonal_data(df_zonal_data)
-        
-        if not zonal_summary_averages.empty:
-            col_table, col_chart = st.columns([1, 1])
-            
-            # The generate_zonal_summary_table function expects columns
-            # with the standardized names. df_zonal_data has these.
-            # We rename them for the state average calculation.
-            df_zonal_renamed_for_table = df_zonal_data.rename(columns={
-                'avg_rain': 'Avg_Rain', 'rain_till_yesterday': 'Rain_Till_Yesterday',
-                'rain_last_24_hrs': 'Rain_Last_24_Hrs', 'total_rainfall': 'Total_Rainfall',
-                'percent_against_avg': 'Percent_Against_Avg'
-            })
-            zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df_zonal_renamed_for_table)
-    
-            with col_table:
-                st.markdown("#### Rainfall Averages by Zone")
-                
-                if not zonal_summary_table_df.empty:
-                    st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[-1:, :]), use_container_width=True)
-                else:
-                    st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
-    
-            with col_chart:
-                st.markdown("#### Zonewise Rainfall vs. % Against Avg.")
-                fig = create_zonal_dual_axis_chart(zonal_summary_averages)
-                st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
-    else:
-        st.warning("Could not find Zonal Rainfall Summary data for the selected date. Please ensure the sheet exists and is accessible.")
-    # --- MODIFIED: END ZONAL SUMMARY SECTION ---
+  # --- MODIFIED: ZONAL SUMMARY SECTION ---
+    st.header("Zonewise Rainfall (Average) Summary Table")
+
+    zonal_summary_averages = get_zonal_data(df_daily_copy)
+
+    if not zonal_summary_averages.empty:
+        col_table, col_chart = st.columns([1, 1])
+        
+        df_daily_renamed_for_table = df_daily_copy.rename(columns={
+            'avg_rain': 'Avg_Rain', 'rain_till_yesterday': 'Rain_Till_Yesterday',
+            'rain_last_24_hrs': 'Rain_Last_24_Hrs', 'total_rainfall': 'Total_Rainfall',
+            'percent_against_avg': 'Percent_Against_Avg'
+        })
+        
+        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df_daily_renamed_for_table)
+
+        with col_table:
+            st.markdown("#### Rainfall Averages by Zone")
+            
+            if not zonal_summary_table_df.empty:
+                st.dataframe(zonal_summary_table_df.style.set_properties(**{'font-weight': 'bold'}, subset=pd.IndexSlice[-1:, :]), use_container_width=True)
+            else:
+                st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
+
+        with col_chart:
+            st.markdown("#### Zonewise Rainfall vs. % Against Avg.")
+            fig = create_zonal_dual_axis_chart(zonal_summary_averages)
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
+    # --- MODIFIED: END ZONAL SUMMARY SECTION ---
 
     st.markdown("---")
     st.markdown("### 🗺️ Rainfall Distribution Overview")

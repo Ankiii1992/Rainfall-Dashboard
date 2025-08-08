@@ -182,23 +182,6 @@ def load_sheet_data(sheet_name, tab_name):
         # st.error(f"Error loading data from sheet '{sheet_name}', tab '{tab_name}': {e}") # For debugging
         return pd.DataFrame() # Return empty DataFrame on failure
 
-# --- NEW: Function to load the zonal summary data from a separate sheet ---
-def load_zonal_sheet_data(selected_date):
-    """Loads the specific sheet with zonal rainfall summary data."""
-    sheet_name = "Zonal_Rainfall_Summary"
-    tab_name = selected_date.strftime("%Y-%m-%d") # Assuming tab name is the date
-    try:
-        client = get_gsheet_client()
-        sheet = client.open(sheet_name).worksheet(tab_name)
-        df = pd.DataFrame(sheet.get_all_records())
-        # Standardize column names early for the get_zonal_data function
-        df.columns = [col.strip().lower() for col in df.columns]
-        return df
-    except Exception as e:
-        # st.error(f"Error loading zonal data from sheet '{sheet_name}', tab '{tab_name}': {e}")
-        return pd.DataFrame()
-
-
 # --- START: USER-PROVIDED ZONAL SUMMARY LOGIC ---
 def get_zonal_data(df):
     """

@@ -183,23 +183,7 @@ def load_sheet_data(sheet_name, tab_name):
         return pd.DataFrame() # Return empty DataFrame on failure
 
 
-# --- NEW: FUNCTIONS FROM CODE 2 START ---
-
-def find_column_with_fuzzy_match(df_columns, pattern):
-    """
-    Finds a column name in the DataFrame that matches a given pattern using regex,
-    allowing for spaces and case-insensitivity.
-    """
-    # Create a regex pattern that is case-insensitive and ignores spaces
-    regex_pattern = re.compile(f"^{re.escape(pattern.replace(' ', ''))}$", re.IGNORECASE)
-    
-    # Iterate through the columns and test for a match
-    for col in df_columns:
-        clean_col = col.replace(' ', '').lower()
-        if re.match(regex_pattern, clean_col):
-            return col
-    return None
-
+# --- START: USER-PROVIDED ZONAL SUMMARY LOGIC ---
 def get_zonal_data(df):
     """
     Generates a zonal summary from a DataFrame that contains all required columns.
@@ -208,97 +192,139 @@ def get_zonal_data(df):
     df_copy = df.copy()
     
     # Standardize column names by stripping spaces and converting to lowercase for robust matching
-    df_copy.columns = [col.strip() for col in df_copy.columns]
+    df_copy.columns = [col.strip().lower() for col in df_copy.columns]
     
-    # Define the required columns we need for the zonal summary
-    # --- FIXED: Added 'rain_last_24_hrs' here ---
-    required_cols_map = {
-        'zone': 'zone',
-        'avg_rain': 'avg_rain',
-        'rain_till_yesterday': 'rain_till_yesterday',
-        'rain_last_24_hrs': 'rain_last_24_hrs',
-        'total_rainfall': 'total_rainfall',
-        'percent_against_avg': 'percent_against_avg',
-    }
-    
-    # Find the actual column names in the DataFrame using fuzzy matching
-    found_cols = {}
-    for internal_name in required_cols_map.keys():
-        found_col = find_column_with_fuzzy_match(df_copy.columns, internal_name)
-        if found_col is None:
-            st.error(f"Required column for '{internal_name}' not found in the data source. Skipping zonal summary.")
-            return pd.DataFrame()
-        found_cols[internal_name] = found_col
-
-    # Rename the columns to a consistent format for internal processing
-    df_copy = df_copy.rename(columns={v: k for k, v in found_cols.items()})
-
     # --- ADD THIS NEW LINE TO FIX ZONE TYPOS ---
     if 'zone' in df_copy.columns:
         df_copy['zone'] = df_copy['zone'].str.strip().str.upper().str.replace('GUJARA T', 'GUJARAT')
 
+    # --- NEW LOGIC FOR FLEXIBLE COLUMN MATCHING ---
+    # Define a mapping from the standardized required name to the column found in the DF
+    col_mapping = {
+        'zone': None,
+        'avg_rain': None,
+        'rain_till_yesterday': None,
+        'rain_last_24_hrs': None,
+        'total_rainfall': None,
+        'percent_against_avg': None,
+    }
+    
+    # Iterate through DF columns and find the best match for each required column
+    standardized_cols = df_copy.columns
+    for req_col, _ in col_mapping.items():
+        if req_col == 'zone':
+            # Handle the 'zone' column separately
+            if 'zone' in standardized_cols:
+                col_mapping['zone'] = 'zone'
+            elif 'zonedistricttaluka' in standardized_cols:
+                # This handles the case if the column is a single, combined one
+                # but we need to split it first. Assuming we only get the simple case now.
+                st.error("Please ensure 'Zone' is a separate column. The script cannot parse combined 'ZoneDistrictTaluka' header.")
+                return pd.DataFrame()
+        elif 'rain_till' in standardized_cols:
+            col_mapping['rain_till_yesterday'] = 'rain_till'
+        elif 'rain_last' in standardized_cols:
+            col_mapping['rain_last_24_hrs'] = 'rain_last'
+        elif 'total_rain' in standardized_cols:
+            col_mapping['total_rainfall'] = 'total_rain'
+        elif 'percent_a' in standardized_cols:
+            col_mapping['percent_against_avg'] = 'percent_a'
+        # General case
+        elif req_col in standardized_cols:
+            col_mapping[req_col] = req_col
+    
+    # Check if all required columns were found
+    for req_col, found_col in col_mapping.items():
+        if found_col is None:
+            st.error(f"Required column for '{req_col}' not found in the data source. Please check your sheet headers.")
+            return pd.DataFrame()
+
+    # Rename the columns to the standard format for the rest of the function
+    df_copy = df_copy.rename(columns={found: req for req, found in col_mapping.items()})
+    
+    # Check if the renamed columns exist before proceeding
+    required_cols_standardized = list(col_mapping.keys())
+    if not all(col in df_copy.columns for col in required_cols_standardized):
+        st.error("Error standardizing columns. Some required columns are missing.")
+        return pd.DataFrame()
+
     # Clean the data and convert to numeric, handling potential errors
-    for col in required_cols_map.keys():
-        if col in df_copy.columns:
-            df_copy[col] = df_copy[col].astype(str).str.replace(' mm', '').str.replace('%', '')
-            df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
+    for col in required_cols_standardized[1:]:
+        df_copy[col] = df_copy[col].astype(str).str.replace(' mm', '').str.replace('%', '')
+        df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
 
     # Get the unique zones directly from the data and sort them
     unique_zones = sorted(df_copy['zone'].unique())
 
     # Group by the dynamically found zone column and calculate averages
-    zonal_averages = df_copy.groupby('zone')[
-        # These columns are now guaranteed to exist because they were just renamed
-        ['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']
-    ].mean().round(2)
+    zonal_averages = df_copy.groupby('zone')[['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg']].mean().round(2)
     
     # Reorder the DataFrame using the unique zones from the data
     final_results = zonal_averages.reindex(unique_zones).reset_index()
     
+    # Revert column names to the original format for display
+    final_results = final_results.rename(columns={
+        'zone': 'Zone',
+        'avg_rain': 'Avg_Rain',
+        'rain_till_yesterday': 'Rain_Till_Yesterday',
+        'rain_last_24_hrs': 'Rain_Last_24_Hrs',
+        'total_rainfall': 'Total_Rainfall',
+        'percent_against_avg': 'Percent_Against_Avg'
+    })
+
     return final_results
 
-def generate_zonal_summary_table(df_zonal_averages):
+
+def generate_zonal_summary_table(df_zonal_averages, df_full_data):
     """Generates a formatted table with zonal averages and a state-wide average row."""
-    if df_zonal_averages.empty:
+    if df_zonal_averages.empty or df_full_data.empty:
         return pd.DataFrame()
 
     df_zonal_averages_copy = df_zonal_averages.copy()
     
-    # Calculate state-wide averages from the zonal averages
-    # --- FIXED: Calculating state_avg from the zonal_averages DataFrame itself ---
-    state_avg = df_zonal_averages_copy[[
-        'avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall', 'percent_against_avg'
-    ]].mean().round(2)
+    # Calculate state-wide averages from the full dataset
+    state_avg = df_full_data[['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall', 'Percent_Against_Avg']].mean().round(2)
     
     # Create a new DataFrame for the state average row
     state_avg_row = pd.DataFrame([state_avg.to_dict()])
-    state_avg_row['zone'] = 'State Avg.'
+    state_avg_row['Zone'] = 'State Avg.'
     
     # Concatenate the zonal averages with the state average row
     final_table = pd.concat([df_zonal_averages_copy, state_avg_row], ignore_index=True)
     
     # Format the columns for display
-    for col in ['avg_rain', 'rain_till_yesterday', 'rain_last_24_hrs', 'total_rainfall']:
+    for col in ['Avg_Rain', 'Rain_Till_Yesterday', 'Rain_Last_24_Hrs', 'Total_Rainfall']:
         final_table[col] = final_table[col].astype(str) + ' mm'
-    final_table['percent_against_avg'] = final_table['percent_against_avg'].astype(str) + '%'
+    final_table['Percent_Against_Avg'] = final_table['Percent_Against_Avg'].astype(str) + '%'
     
     # Rename columns for better display
     final_table = final_table.rename(columns={
-        'zone': 'Zone',
-        'avg_rain': 'Avg_Rain (mm)',
-        'rain_till_yesterday': 'Rain_Till_Yesterday (mm)',
-        'rain_last_24_hrs': 'Rain_Last_24_Hrs (mm)',
-        'total_rainfall': 'Total_Rainfall (mm)',
-        'percent_against_avg': 'Percent_Against_Avg'
+        'Avg_Rain': 'Avg_Rain (mm)',
+        'Rain_Till_Yesterday': 'Rain_Till_Yesterday (mm)',
+        'Rain_Last_24_Hrs': 'Rain_Last_24_Hrs (mm)',
+        'Total_Rainfall': 'Total_Rainfall (mm)',
+        'Percent_Against_Avg': 'Percent_Against_Avg'
     })
     
     return final_table
+# --- END: USER-PROVIDED ZONAL SUMMARY LOGIC ---
 
 
 def create_zonal_dual_axis_chart(data):
     """Creates a dual-axis chart for zonal rainfall."""
-    # --- FIXED: Using standardized column names from get_zonal_data output ---
     fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # The dataframe passed to this function must have standardized column names.
+    # The user's get_zonal_data renames columns for display, so we have to use
+    # standardized names for the chart
+    data = data.rename(columns={
+        'Zone': 'zone',
+        'Avg_Rain': 'avg_rain',
+        'Rain_Till_Yesterday': 'rain_till_yesterday',
+        'Rain_Last_24_Hrs': 'rain_last_24_hrs',
+        'Total_Rainfall': 'total_rainfall',
+        'Percent_Against_Avg': 'percent_against_avg'
+    })
     
     fig.add_trace(
         go.Bar(
@@ -343,8 +369,6 @@ def create_zonal_dual_axis_chart(data):
     fig.update_yaxes(title_text="% Against Avg. Rainfall", secondary_y=True)
     
     return fig
-
-# --- NEW: FUNCTIONS FROM CODE 2 END ---
 
 
 # --- plot_choropleth function (for map that plots daily total) ---
@@ -474,6 +498,7 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         highest_taluka = pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
 
+    # The user's code expects columns like `Percent_Against_Avg` to be present
     percent_against_avg = df["Percent_Against_Avg"].mean() if "Percent_Against_Avg" in df.columns and not df["Percent_Against_Avg"].isnull().all() else 0.0
 
     col1, col2, col3 = st.columns(3)
@@ -515,20 +540,18 @@ def show_24_hourly_dashboard(df, selected_date):
     # --- NEW: ZONAL SUMMARY SECTION ---
     st.header("Zonewise Rainfall (Average) Summary Table")
     
-    # We use a copy to avoid modifying the original dataframe
     df_daily_for_zonal = df.copy()
-
-    # The column names in the full data must be consistent with what the zonal summary expects
-    # Here, we rename the existing columns to match the expected names before passing the data
-    df_daily_for_zonal = df_daily_for_zonal.rename(columns={'Total_mm': 'rain_last_24_hrs'})
     
+    # We rename columns to lowercase for the user-provided get_zonal_data logic
+    df_daily_for_zonal.columns = [col.strip().lower() for col in df_daily_for_zonal.columns]
+
     zonal_summary_averages = get_zonal_data(df_daily_for_zonal)
 
     if not zonal_summary_averages.empty:
         col_table, col_chart = st.columns([1, 1])
         
-        # --- FIXED: Passing only the zonal averages DataFrame ---
-        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages)
+        # --- FIXED: Passing both DataFrames as required by the user's logic ---
+        zonal_summary_table_df = generate_zonal_summary_table(zonal_summary_averages, df)
 
         with col_table:
             st.markdown("#### Rainfall Averages by Zone")
@@ -544,7 +567,7 @@ def show_24_hourly_dashboard(df, selected_date):
             st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Could not generate Zonewise Summary. Please ensure your data source contains the required columns and is loaded correctly.")
-    # --- NEW: END ZONAL SUMMARY SECTION ---
+    # --- END ZONAL SUMMARY SECTION ---
 
     st.markdown("---")
     st.markdown("### 🗺️ Rainfall Distribution Overview")

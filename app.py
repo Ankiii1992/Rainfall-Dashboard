@@ -10,8 +10,6 @@ from datetime import datetime, timedelta
 import os
 import io
 import re
-
-# ---------------------------- CONFIG ----------------------------
 # ---------------------------- CONFIG ----------------------------
 @st.cache_resource
 def get_gsheet_client():

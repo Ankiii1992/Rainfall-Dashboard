@@ -311,32 +311,31 @@ def show_24_hourly_dashboard(df, selected_date):
     # ---- NEW LAYOUT: METRICS & VISUALS ----
 
     # Calculate metrics
+    state_total_seasonal_avg = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
     state_avg_24hr = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
     highest_taluka = df.loc[df["Total_mm"].idxmax()] if not df["Total_mm"].isnull().all() else pd.Series({'Taluka': 'N/A', 'Total_mm': 0, 'District': 'N/A'})
 
     # Placeholder for Seasonal Average - you need to populate this from your data source
-    state_seasonal_avg_rainfall = 700.0 # Example value for demonstration
-    state_total_avg_rainfall = 500.0 # Example value, assuming this is the cumulative total so far
-    state_rainfall_progress_percentage = (state_total_avg_rainfall / state_seasonal_avg_rainfall) * 100 if state_seasonal_avg_rainfall > 0 else 0
+    state_seasonal_target = 700.0 # Example value for demonstration
+    state_rainfall_progress_percentage = (state_total_seasonal_avg / state_seasonal_target) * 100 if state_seasonal_target > 0 else 0
 
     highest_district_row = df.groupby('District')['Total_mm'].mean().reset_index().sort_values(by='Total_mm', ascending=False).iloc[0]
     highest_district = highest_district_row['District']
     highest_district_avg = highest_district_row['Total_mm']
 
     # --- NEW LAYOUT: Row 1 - Four Metric Tiles ---
-    st.markdown("### **Key Rainfall Metrics**")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>State Seasonal Avg. Rainfall</h4><h2>{state_seasonal_avg_rainfall:.1f} mm</h2></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>State Total Seasonal Rainfall Till Today (Avg.)</h4><h2>{state_total_seasonal_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col2:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>State Avg. Rain (24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col3:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall District</h4><h2>{highest_district}</h2><p>({highest_district_avg:.1f} mm)</p></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall District (Talukas Avg.)</h4><h2>{highest_district}</h2><p>({highest_district_avg:.1f} mm)</p></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with col4:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -346,14 +345,14 @@ def show_24_hourly_dashboard(df, selected_date):
     st.markdown("---")
 
     # --- NEW LAYOUT: Row 2 - Gauge and Distribution Charts ---
-    st.markdown("### **Rainfall Distribution & Progress**")
     col_gauge, col_charts = st.columns([0.3, 0.7])
 
     with col_gauge:
-        st.markdown("#### State Rainfall Progress (%)")
+        st.markdown("#### State Seasonal Avg. Rainfall Till Today (%)")
         fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
+            mode="gauge+number+delta",
             value=state_rainfall_progress_percentage,
+            title={'text': "Rainfall Progress"},
             domain={'x': [0, 1], 'y': [0, 1]},
             gauge={
                 'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
@@ -362,17 +361,17 @@ def show_24_hourly_dashboard(df, selected_date):
                 'borderwidth': 2,
                 'bordercolor': "gray",
                 'steps': [
-                    {'range': [0, 25], 'color': "lightgray"},
-                    {'range': [25, 50], 'color': "gray"},
-                    {'range': [50, 75], 'color': "darkgray"},
-                    {'range': [75, 100], 'color': "lightgreen"}
+                    {'range': [0, 25], 'color': "#ffe0e0"},
+                    {'range': [25, 50], 'color': "#fff5e0"},
+                    {'range': [50, 75], 'color': "#f0ffe0"},
+                    {'range': [75, 100], 'color': "#e0fff5"}
                 ],
                 'threshold': {
                     'line': {'color': "red", 'width': 4},
                     'thickness': 0.75,
                     'value': 100}
             }))
-        fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20))
+        fig_gauge.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=20))
         st.plotly_chart(fig_gauge, use_container_width=True)
 
     with col_charts:
@@ -435,6 +434,7 @@ def show_24_hourly_dashboard(df, selected_date):
     
     # --- Rainfall Distribution Maps (re-used from old code) ---
     st.markdown("### 🗺️ Rainfall Distribution Overview")
+
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
         columns={'Total_mm': 'District_Avg_Rain_Last_24_Hrs'}
@@ -470,7 +470,7 @@ def show_24_hourly_dashboard(df, selected_date):
 
 
     with tab_districts:
-        map_col_dist = st.columns([1])[0]
+        map_col_dist, insights_col_dist = st.columns([0.5, 0.5])
 
         with map_col_dist:
             st.markdown("#### Gujarat Rainfall Map (by District)")
@@ -484,8 +484,51 @@ def show_24_hourly_dashboard(df, selected_date):
                 )
                 st.plotly_chart(fig_map_districts, use_container_width=True)
 
+        with insights_col_dist:
+            st.markdown("#### Key Insights & Distributions (Districts)")
+
+            category_counts_dist = district_rainfall_avg_df['Rainfall_Category'].value_counts().reset_index()
+            category_counts_dist.columns = ['Category', 'Count']
+            category_counts_dist['Category'] = pd.Categorical(
+                category_counts_dist['Category'],
+                categories=ordered_categories,
+                ordered=True
+            )
+            category_counts_dist = category_counts_dist.sort_values('Category')
+            category_counts_dist['Rainfall_Range'] = category_counts_dist['Category'].map(category_ranges)
+
+
+            fig_category_dist_dist = px.bar(
+                category_counts_dist,
+                x='Category',
+                y='Count',
+                title='Distribution of Districts by Daily Rainfall Category',
+                labels={'Count': 'Number of Districts'},
+                color='Category',
+                color_discrete_map=color_map,
+                hover_data={
+                    'Category': True,
+                    'Rainfall_Range': True,
+                    'Count': True
+                }
+            )
+            fig_category_dist_dist.update_layout(
+                xaxis=dict(
+                    tickmode='array',
+                    tickvals=category_counts_dist['Category'],
+                    ticktext=[cat for cat in category_counts_dist['Category']],
+                    tickangle=0
+                ),
+                xaxis_title=None,
+                showlegend=False,
+                height=350,
+                margin=dict(l=0, r=0, t=50, b=0)
+            )
+            st.plotly_chart(fig_category_dist_dist, use_container_width=True)
+
+
     with tab_talukas:
-        map_col_tal = st.columns([1])[0]
+        map_col_tal, insights_col_tal = st.columns([0.5, 0.5])
 
         with map_col_tal:
             st.markdown("#### Gujarat Rainfall Map (by Taluka)")
@@ -498,6 +541,48 @@ def show_24_hourly_dashboard(df, selected_date):
                     geo_location_col="Taluka"
                 )
                 st.plotly_chart(fig_map_talukas, use_container_width=True)
+
+        with insights_col_tal:
+            st.markdown("#### Key Insights & Distributions (Talukas)")
+
+            category_counts_tal = df_map_talukas['Rainfall_Category'].value_counts().reset_index()
+            category_counts_tal.columns = ['Category', 'Count']
+            category_counts_tal['Category'] = pd.Categorical(
+                category_counts_tal['Category'],
+                categories=ordered_categories,
+                ordered=True
+            )
+            category_counts_tal = category_counts_tal.sort_values('Category')
+            category_counts_tal['Rainfall_Range'] = category_counts_tal['Category'].map(category_ranges)
+
+
+            fig_category_dist_tal = px.bar(
+                category_counts_tal,
+                x='Category',
+                y='Count',
+                title='Distribution of Talukas by Daily Rainfall Category',
+                labels={'Count': 'Number of Talukas'},
+                color='Category',
+                color_discrete_map=color_map,
+                hover_data={
+                    'Category': True,
+                    'Rainfall_Range': True,
+                    'Count': True
+                }
+            )
+            fig_category_dist_tal.update_layout(
+                xaxis=dict(
+                    tickmode='array',
+                    tickvals=category_counts_tal['Category'],
+                    ticktext=[cat for cat in category_counts_tal['Category']],
+                    tickangle=0
+                ),
+                xaxis_title=None,
+                showlegend=False,
+                height=350,
+                margin=dict(l=0, r=0, t=50, b=0)
+            )
+            st.plotly_chart(fig_category_dist_tal, use_container_width=True)
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")

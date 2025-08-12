@@ -75,19 +75,6 @@ st.markdown("""
         font-size: 0.95rem;
         color: #37474f;
     }
-
-    /* These CSS rules for the download button will likely NOT WORK if unsafe_allow_html=True */
-    /* does not permit direct injection of elements to hide Streamlit's native components */
-    .stDataFrame header {
-        display: none !important;
-    }
-    [data-testid="stDataFrameToolbar"] button {
-        display: none !important;
-    }
-    [data-testid="stDataFrameToolbar"] {
-        display: none !important;
-    }
-
 </style>
 
 <script>
@@ -109,7 +96,7 @@ color_map = {
     "Exceptional": "#e8aaf5"
 }
 
-category_ranges = { # From reference code
+category_ranges = {
     "No Rain": "0 mm",
     "Very Light": "0.1 – 2.4 mm",
     "Light": "2.5 – 7.5 mm",
@@ -141,7 +128,6 @@ def classify_rainfall(rainfall):
     else:
         return "Exceptional"
 
-# Ensure the order of categories for the Plotly color scale and legend
 ordered_categories = [
     "No Rain", "Very Light", "Light", "Moderate", "Rather Heavy",
     "Heavy", "Very Heavy", "Extremely Heavy", "Exceptional"
@@ -161,61 +147,43 @@ def load_sheet_data(sheet_name, tab_name):
         sheet = client.open(sheet_name).worksheet(tab_name)
         df = pd.DataFrame(sheet.get_all_records())
         df.columns = df.columns.str.strip()
-        # Ensure column names are consistent early - only rename if 'TOTAL' is present
         if 'TOTAL' in df.columns:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
-        else: # For 2-hourly data where 'TOTAL' might not be a direct column
+        else:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
     except Exception as e:
-        # st.error(f"Error loading data from sheet '{sheet_name}', tab '{tab_name}': {e}") # For debugging
-        return pd.DataFrame() # Return empty DataFrame on failure
+        return pd.DataFrame()
 
 def correct_taluka_names(df):
-    """
-    Corrects taluka names in the DataFrame to match the GeoJSON file.
-    This ensures that data is correctly plotted on the map.
-    """
     taluka_name_mapping = {
-        "Morbi": "Morvi",
-        "Ahmedabad City": "Ahmadabad City",
-        "Maliya Hatina": "Malia",
-        "Shihor": "Sihor",
-        "Dwarka": "Okhamandal",
-        "Kalol(Gnr)": "Kalol",
+        "Morbi": "Morvi", "Ahmedabad City": "Ahmadabad City", "Maliya Hatina": "Malia",
+        "Shihor": "Sihor", "Dwarka": "Okhamandal", "Kalol(Gnr)": "Kalol",
     }
     df['Taluka'] = df['Taluka'].replace(taluka_name_mapping)
     return df
 
-
-# --- plot_choropleth function (for map that plots daily total) ---
 def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
-    # This function is now made more generic to handle both talukas and districts
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
         return go.Figure()
 
     df_plot = df.copy()
 
-    # Determine which column to use for feature linking and what to strip/lower
     if geo_location_col == "Taluka":
         df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
     elif geo_location_col == "District":
         df_plot["District"] = df_plot["District"].astype(str).str.strip().str.lower()
 
-
-    # The column for coloring the map should be 'Total_mm' (daily total for taluka)
-    # or 'District_Avg_Rain_Last_24_Hrs' for district.
     color_column = None
-    if 'Total_mm' in df_plot.columns: # For Talukas
+    if 'Total_mm' in df_plot.columns:
         color_column = 'Total_mm'
-    elif 'District_Avg_Rain_Last_24_Hrs' in df_plot.columns: # For Districts
+    elif 'District_Avg_Rain_Last_24_Hrs' in df_plot.columns:
         color_column = 'District_Avg_Rain_Last_24_Hrs'
     else:
-        st.warning(f"Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization. Map may not display categories correctly.")
-        df_plot["Rainfall_Category"] = "No Rain" # Default if data is missing
+        st.warning("Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization. Map may not display categories correctly.")
+        df_plot["Rainfall_Category"] = "No Rain"
         color_column = "Rainfall_Category"
-
 
     if color_column:
         df_plot[color_column] = pd.to_numeric(df_plot[color_column], errors='coerce')
@@ -226,29 +194,27 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
             ordered=True
         )
 
-    # Clean geojson properties for matching
     for feature in geojson_data["features"]:
         if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
             feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
         elif geo_feature_id_key == "properties.district" and "district" in feature["properties"]:
             feature["properties"]["district"] = feature["properties"]["district"].strip().lower()
 
-
     fig = px.choropleth_mapbox(
         df_plot,
         geojson=geojson_data,
-        featureidkey=geo_feature_id_key, # Dynamic key for Taluka or District
-        locations=geo_location_col,     # Dynamic column for Taluka or District
+        featureidkey=geo_feature_id_key,
+        locations=geo_location_col,
         color="Rainfall_Category",
         color_discrete_map=color_map,
         mapbox_style="open-street-map",
         zoom=6,
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
-        hover_name=geo_location_col, # Use dynamic column for hover name
+        hover_name=geo_location_col,
         hover_data={
-            color_column: ":.1f mm", # Show actual rainfall value
-            "District": True if geo_location_col == "Taluka" else False, # Only show district for taluka map
+            color_column: ":.1f mm",
+            "District": True if geo_location_col == "Taluka" else False,
             "Rainfall_Category":False
         },
         height=650,
@@ -257,7 +223,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     fig.update_layout(
         margin={"r":0,"t":0,"l":0,"b":0},
         uirevision='true',
-        showlegend=True, # Ensure legend is shown for map
+        showlegend=True,
         legend=dict(
             orientation="h",
             yanchor="top",
@@ -272,68 +238,44 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     return fig
 
 
-# --- show_24_hourly_dashboard function (for Daily Summary tab - NOW INCLUDES ALL DAILY CHARTS) ---
 def show_24_hourly_dashboard(df, selected_date):
     df = correct_taluka_names(df)
-    # Rename 'Rain_Last_24_Hrs' to 'Total_mm' for consistency if it's the 24hr data source
     if "Rain_Last_24_Hrs" in df.columns:
         df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
 
     required_cols = ["Total_mm", "Taluka", "District"]
     for col in required_cols:
         if col not in df.columns:
-            st.error(f"Required column '{col}' not found in the loaded data. Please check your Google Sheet headers for 24-hour data.")
+            st.error(f"Required column '{col}' not found in the loaded data.")
             return
-            
-    # --- NEW: Add placeholder columns for new metrics ---
-    # The user must provide these columns in their actual data
+
     if 'Total_Rainfall' not in df.columns:
-        df['Total_Rainfall'] = df['Total_mm'] * 1.5 # Example placeholder
+        df['Total_Rainfall'] = df['Total_mm'] * 1.5
     if 'Percent_Against_Avg' not in df.columns:
-        df['Percent_Against_Avg'] = (df['Total_Rainfall'] / 700) * 100 # Example placeholder, assuming 700 is a seasonal avg
+        df['Percent_Against_Avg'] = (df['Total_Rainfall'] / 700) * 100
 
     df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors='coerce')
     df["Total_Rainfall"] = pd.to_numeric(df["Total_Rainfall"], errors='coerce')
     df["Percent_Against_Avg"] = pd.to_numeric(df["Percent_Against_Avg"], errors='coerce')
-
-
-    # --- NEW CODE START: District Name Standardization ---
-    # Define mapping for known district name discrepancies
+    
     district_name_mapping = {
-        "Chhota Udepur": "Chhota Udaipur",
-        "Dangs": "Dang",
-        "Kachchh": "Kutch",
-        "Mahesana": "Mehsana",
-        # Add more mappings here if you discover other mismatches
+        "Chhota Udepur": "Chhota Udaipur", "Dangs": "Dang",
+        "Kachchh": "Kutch", "Mahesana": "Mehsana",
     }
-
-    # Apply the mapping to the 'District' column
     df['District'] = df['District'].replace(district_name_mapping)
-
-    # Ensure consistent casing and stripping for matching with GeoJSON
-    # This also handles cases where a district name might just have leading/trailing spaces
     df['District'] = df['District'].astype(str).str.strip()
-    # --- NEW CODE END: District Name Standardization ---
 
     title = generate_title_from_date(selected_date)
     st.subheader(title)
 
-    # ---- NEW LAYOUT: METRICS & VISUALS ----
-
-    # Calculate metrics
     state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
     state_avg_24hr = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
     highest_taluka = df.loc[df["Total_mm"].idxmax()] if not df["Total_mm"].isnull().all() else pd.Series({'Taluka': 'N/A', 'Total_mm': 0, 'District': 'N/A'})
-
-    # --- NEW: Use average of Percent_Against_Avg for the progress bar ---
     state_rainfall_progress_percentage = df['Percent_Against_Avg'].mean() if not df["Percent_Against_Avg"].isnull().all() else 0.0
-
-
     highest_district_row = df.groupby('District')['Total_mm'].mean().reset_index().sort_values(by='Total_mm', ascending=False).iloc[0]
     highest_district = highest_district_row['District']
     highest_district_avg = highest_district_row['Total_mm']
 
-    # --- NEW LAYOUT: Row 1 - Four Metric Tiles ---
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -354,11 +296,12 @@ def show_24_hourly_dashboard(df, selected_date):
     
     st.markdown("---")
 
-    # --- NEW LAYOUT: Row 2 - Circular Progress Bar and Distribution Charts ---
     col_progress, col_charts = st.columns([0.3, 0.7])
 
     with col_progress:
         st.markdown("#### State Seasonal Avg. Rainfall Till Today (%)")
+        
+        # --- UPDATED CODE: New circular progress bar using Plotly ---
         fig_progress = go.Figure(go.Indicator(
             mode="gauge+number",
             value=state_rainfall_progress_percentage,
@@ -367,14 +310,15 @@ def show_24_hourly_dashboard(df, selected_date):
             gauge={
                 'shape': 'angular',
                 'axis': {'range': [0, 100], 'visible': False},
-                'bar': {'color': "#3498db", 'line': {'color': '#1a237e', 'width': 2}}, # A solid blue for a better look
-                'bgcolor': "rgba(52, 152, 219, 0.2)", # Lighter blue for the unfilled portion
+                'bar': {'color': "#3498db", 'line': {'color': 'rgba(52, 152, 219, 0.5)', 'width': 5}, 'thickness': 0.85},
+                'bgcolor': "rgba(52, 152, 219, 0.2)",
                 'borderwidth': 0,
-                'steps': [], # No steps for a clean progress bar
+                'steps': [],
                 'threshold': {
                     'line': {'color': "red", 'width': 4},
                     'thickness': 0.75,
-                    'value': 100}
+                    'value': 100
+                }
             },
             number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
         ))
@@ -383,7 +327,6 @@ def show_24_hourly_dashboard(df, selected_date):
         st.plotly_chart(fig_progress, use_container_width=True)
 
     with col_charts:
-        # Pie chart (re-used from old code)
         TOTAL_TALUKAS_GUJARAT = 251
         num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
         talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
@@ -406,29 +349,22 @@ def show_24_hourly_dashboard(df, selected_date):
         fig_pie.update_layout(showlegend=False, height=250, margin=dict(l=0, r=0, t=40, b=0))
         st.plotly_chart(fig_pie, use_container_width=True)
         
-        # Bar chart for taluka counts
-        rainfall_categories = {
-            'Talukas > 200 mm': df[df['Total_mm'] > 200].shape[0],
-            'Talukas > 150 mm': df[df['Total_mm'] > 150].shape[0],
-            'Talukas > 100 mm': df[df['Total_mm'] > 100].shape[0],
-            'Talukas > 75 mm': df[df['Total_mm'] > 75].shape[0],
-            'Talukas > 50 mm': df[df['Total_mm'] > 50].shape[0],
-            'Talukas > 25 mm': df[df['Total_mm'] > 25].shape[0]
-        }
-        categories_df = pd.DataFrame(list(rainfall_categories.items()), columns=['Category', 'Count'])
+        # --- NEW CODE: New chart for Top 10 Districts by Avg Rainfall ---
+        df_top_10_districts = df.groupby('District')['Total_mm'].mean().reset_index()
+        df_top_10_districts = df_top_10_districts.sort_values(by='Total_mm', ascending=False).head(10)
 
-        fig_bar = px.bar(
-            categories_df,
-            x='Category',
-            y='Count',
-            title='Distribution of Talukas by Rainfall Intensity',
-            labels={'Count': 'Number of Talukas'},
-            color='Count',
-            color_continuous_scale=px.colors.sequential.YlGnBu,
-            text='Count'
+        fig_bar_districts = px.bar(
+            df_top_10_districts,
+            x='District',
+            y='Total_mm',
+            title='Top 10 Districts by Average Daily Rainfall',
+            labels={'Total_mm': 'Average Rainfall (mm)'},
+            color='Total_mm',
+            color_continuous_scale=px.colors.sequential.Bluyl,
+            text='Total_mm'
         )
-        fig_bar.update_traces(texttemplate='%{text}', textposition='outside')
-        fig_bar.update_layout(
+        fig_bar_districts.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+        fig_bar_districts.update_layout(
             xaxis_title=None,
             yaxis_title=None,
             xaxis_tickangle=-45,
@@ -436,11 +372,10 @@ def show_24_hourly_dashboard(df, selected_date):
             height=300,
             margin=dict(l=0, r=0, t=50, b=0)
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar_districts, use_container_width=True)
     
     st.markdown("---")
     
-    # --- Rainfall Distribution Maps (re-used from old code) ---
     st.markdown("### 🗺️ Rainfall Distribution Overview")
 
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
@@ -504,7 +439,6 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             category_counts_dist = category_counts_dist.sort_values('Category')
             category_counts_dist['Rainfall_Range'] = category_counts_dist['Category'].map(category_ranges)
-
 
             fig_category_dist_dist = px.bar(
                 category_counts_dist,
@@ -734,7 +668,6 @@ with tab_hourly:
         )
         df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 
-
         df_2hr['Total_mm'] = pd.to_numeric(df_2hr['Total_mm'], errors='coerce')
 
         top_taluka_row = df_2hr.sort_values(by='Total_mm', ascending=False).iloc[0] if not df_2hr['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
@@ -782,7 +715,6 @@ with tab_hourly:
         else:
             st.info("Please select at least one Taluka to view the rainfall trend.")
 
-
         st.markdown("### 📋 Full 2-Hourly Rainfall Data Table")
         df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
         df_display_2hr.index += 1
@@ -790,7 +722,6 @@ with tab_hourly:
 
     else:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
-
 
 with tab_historical:
     st.header("Historical Rainfall Data")

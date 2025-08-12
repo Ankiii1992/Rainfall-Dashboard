@@ -310,8 +310,12 @@ def show_24_hourly_dashboard(df, selected_date):
             gauge={
                 'shape': 'angular',
                 'axis': {'range': [0, 100], 'visible': False, 'tickmode': 'array', 'tickvals': [0, 100]},
-                'bar': {'color': "#1A73E8", 'line': {'color': '#1a237e', 'width': 2}},
-                'bgcolor': "rgba(235, 235, 235, 0.5)",
+                'bar': {
+                    'color': "#1A73E8",
+                    'line': {'color': '#1a237e', 'width': 2},
+                    'thickness': 0.25 # Adjust the thickness of the bar to make it thicker
+                },
+                'bgcolor': "#e0e0e0", # The background color of the track
                 'borderwidth': 0,
                 'steps': [],
                 'threshold': {
@@ -322,8 +326,11 @@ def show_24_hourly_dashboard(df, selected_date):
             },
             number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
         ))
-        fig_progress.update_layout(height=280, margin=dict(l=20, r=20, t=50, b=20),
-            paper_bgcolor="#f3f6fa")
+        fig_progress.update_layout(
+            height=280,
+            margin=dict(l=20, r=20, t=50, b=20),
+            paper_bgcolor="#f3f6fa"
+        )
         st.plotly_chart(fig_progress, use_container_width=True)
 
     with col_charts:
@@ -374,7 +381,7 @@ def show_24_hourly_dashboard(df, selected_date):
         st.plotly_chart(fig_bar_districts, use_container_width=True)
     
     st.markdown("---")
-    
+
     st.markdown("### 🗺️ Rainfall Distribution Overview")
 
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()

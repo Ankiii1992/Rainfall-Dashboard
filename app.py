@@ -301,17 +301,17 @@ def show_24_hourly_dashboard(df, selected_date):
     with col_progress:
         st.markdown("#### State Seasonal Avg. Rainfall Till Today (%)")
         
-        # --- UPDATED CODE: New circular progress bar using Plotly ---
+        # --- NEW & CORRECTED CODE: Full circular progress bar with a thicker, solid track ---
         fig_progress = go.Figure(go.Indicator(
             mode="gauge+number",
             value=state_rainfall_progress_percentage,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "", 'font': {'size': 20}},
+            title={'text': ""},
             gauge={
                 'shape': 'angular',
-                'axis': {'range': [0, 100], 'visible': False},
-                'bar': {'color': "#3498db", 'line': {'color': 'rgba(52, 152, 219, 0.5)', 'width': 5}, 'thickness': 0.85},
-                'bgcolor': "rgba(52, 152, 219, 0.2)",
+                'axis': {'range': [0, 100], 'visible': False, 'tickmode': 'array', 'tickvals': [0, 100]},
+                'bar': {'color': "#1A73E8", 'line': {'color': '#1a237e', 'width': 2}},
+                'bgcolor': "rgba(235, 235, 235, 0.5)",
                 'borderwidth': 0,
                 'steps': [],
                 'threshold': {
@@ -349,7 +349,6 @@ def show_24_hourly_dashboard(df, selected_date):
         fig_pie.update_layout(showlegend=False, height=250, margin=dict(l=0, r=0, t=40, b=0))
         st.plotly_chart(fig_pie, use_container_width=True)
         
-        # --- NEW CODE: New chart for Top 10 Districts by Avg Rainfall ---
         df_top_10_districts = df.groupby('District')['Total_mm'].mean().reset_index()
         df_top_10_districts = df_top_10_districts.sort_values(by='Total_mm', ascending=False).head(10)
 

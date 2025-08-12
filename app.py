@@ -10,7 +10,6 @@ import os
 import io
 
 # ---------------------------- CONFIG ----------------------------
-# The functions to connect to Google Sheets and load GeoJSON remain the same
 @st.cache_resource
 def get_gsheet_client():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -27,7 +26,7 @@ def load_geojson(path):
     st.error(f"GeoJSON file not found at: {path}")
     return None
 
-# --- NEW: Enhanced CSS (from reference code) ---
+# --- NEW: Enhanced CSS for better alignment ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -40,9 +39,6 @@ st.markdown("""
         color: #1a237e;
         padding: 1rem 0 0.2rem 0;
     }
-    .metric-container {
-        padding: 0.8rem;
-    }
     .metric-tile {
         background: linear-gradient(135deg, #f0faff, #e0f2f1);
         padding: 1.2rem 1.4rem 1rem 1.4rem;
@@ -51,19 +47,21 @@ st.markdown("""
         text-align: center;
         transition: 0.3s ease;
         border: 1px solid #c5e1e9;
-        height: 165px; /* Adjusted height for consistency */
+        min-height: 120px; /* Adjusted min-height for better fit */
         display: flex;
         flex-direction: column;
         justify-content: center;
+        margin-bottom: 0.5rem;
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
         font-size: 1.05rem;
         margin-bottom: 0.2rem;
+        line-height: 1.2;
     }
     .metric-tile h2 {
         font-size: 2.2rem;
@@ -83,10 +81,11 @@ st.markdown("""
         box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
         text-align: center;
         margin-bottom: 1rem;
-        height: auto;
+    }
+    .tile-container {
+        padding: 0.5rem;
     }
 </style>
-
 <script>
     document.addEventListener('contextmenu', event => event.preventDefault());
 </script>
@@ -94,7 +93,6 @@ st.markdown("""
 
 
 # ---------------------------- RAINFALL CATEGORY LOGIC ----------------------------
-# These helper functions for rainfall classification and color mapping are the same
 color_map = {
     "No Rain": "#f8f8f8",
     "Very Light": "#e0ffe0",
@@ -144,9 +142,27 @@ ordered_categories = [
     "Heavy", "Very Heavy", "Extremely Heavy", "Exceptional"
 ]
 
+def generate_rainfall_category_tiles_data(df):
+    rainfall_categories = {
+        '25mm_plus': {'min': 25, 'max': 50, 'title': '> 25 mm'},
+        '50mm_plus': {'min': 50, 'max': 75, 'title': '> 50 mm'},
+        '75mm_plus': {'min': 75, 'max': 100, 'title': '> 75 mm'},
+        '100mm_plus': {'min': 100, 'max': 125, 'title': '> 100 mm'},
+        '125mm_plus': {'min': 125, 'max': 150, 'title': '> 125 mm'},
+        '150mm_plus': {'min': 150, 'max': 175, 'title': '> 150 mm'},
+        '175mm_plus': {'min': 175, 'max': 200, 'title': '> 175 mm'},
+        '200mm_plus': {'min': 200, 'max': float('inf'), 'title': '> 200 mm'}
+    }
+
+    tiles_data = []
+    for key, val in rainfall_categories.items():
+        count = df[(df['Total_mm'] >= val['min']) & (df['Total_mm'] < val['max'])].shape[0]
+        tiles_data.append({'title': val['title'], 'count': count})
+    
+    return tiles_data
+
 
 # ---------------------------- UTILITY FUNCTIONS ----------------------------
-# These utility functions for data loading, name correction, and plotting maps remain the same
 def generate_title_from_date(selected_date):
     start_date = (selected_date - timedelta(days=1)).strftime("%d-%m-%Y")
     end_date = selected_date.strftime("%d-%m-%Y")
@@ -181,7 +197,6 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
         return go.Figure()
 
     df_plot = df.copy()
-
     if geo_location_col == "Taluka":
         df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
     elif geo_location_col == "District":
@@ -200,11 +215,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     if color_column:
         df_plot[color_column] = pd.to_numeric(df_plot[color_column], errors='coerce')
         df_plot["Rainfall_Category"] = df_plot[color_column].apply(classify_rainfall)
-        df_plot["Rainfall_Category"] = pd.Categorical(
-            df_plot["Rainfall_Category"],
-            categories=ordered_categories,
-            ordered=True
-        )
+        df_plot["Rainfall_Category"] = pd.Categorical(df_plot["Rainfall_Category"], categories=ordered_categories, ordered=True)
 
     for feature in geojson_data["features"]:
         if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
@@ -224,11 +235,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
         hover_name=geo_location_col,
-        hover_data={
-            color_column: ":.1f mm",
-            "District": True if geo_location_col == "Taluka" else False,
-            "Rainfall_Category":False
-        },
+        hover_data={color_column: ":.1f mm", "District": True if geo_location_col == "Taluka" else False, "Rainfall_Category":False},
         height=650,
         title=title
     )
@@ -249,28 +256,8 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     )
     return fig
 
-# --- NEW: Function to generate rainfall category tiles ---
-def generate_rainfall_category_tiles(df):
-    rainfall_categories = {
-        '25mm_plus': {'min': 25, 'max': 50, 'title': '> 25 mm'},
-        '50mm_plus': {'min': 50, 'max': 75, 'title': '> 50 mm'},
-        '75mm_plus': {'min': 75, 'max': 100, 'title': '> 75 mm'},
-        '100mm_plus': {'min': 100, 'max': 125, 'title': '> 100 mm'},
-        '125mm_plus': {'min': 125, 'max': 150, 'title': '> 125 mm'},
-        '150mm_plus': {'min': 150, 'max': 175, 'title': '> 150 mm'},
-        '175mm_plus': {'min': 175, 'max': 200, 'title': '> 175 mm'},
-        '200mm_plus': {'min': 200, 'max': float('inf'), 'title': '> 200 mm'}
-    }
-
-    tiles_data = {}
-    for key, val in rainfall_categories.items():
-        count = df[(df['Total_mm'] >= val['min']) & (df['Total_mm'] < val['max'])].shape[0]
-        tiles_data[key] = {'count': count, 'title': val['title']}
-    
-    return tiles_data
 
 # ---------------------------- DASHBOARD LAYOUT FUNCTIONS ----------------------------
-# This is the main function where the layout changes are implemented
 def show_24_hourly_dashboard(df, selected_date):
     df = correct_taluka_names(df)
     if "Rain_Last_24_Hrs" in df.columns:
@@ -350,7 +337,7 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_right:
-        # First row of tiles
+        # First row: Key Metrics
         st.markdown("### Key Metrics")
         col_r1_1, col_r1_2, col_r1_3 = st.columns(3)
         with col_r1_1:
@@ -370,61 +357,7 @@ def show_24_hourly_dashboard(df, selected_date):
         
         st.markdown("---")
 
-        # Second row with Taluka category tiles and Pie Chart
-        st.markdown("### Taluka-Level Rainfall Distribution")
-        col_r2_1, col_r2_2 = st.columns([0.6, 0.4])
-
-        with col_r2_1:
-            st.markdown("#### Talukas by Rainfall Category")
-            tiles_data = generate_rainfall_category_tiles(df)
-            
-            # Using columns to create a grid of tiles for the categories
-            cols_r2_inner_1 = st.columns(4)
-            cols_r2_inner_2 = st.columns(4)
-            
-            tile_keys = list(tiles_data.keys())
-
-            for i in range(len(cols_r2_inner_1)):
-                with cols_r2_inner_1[i]:
-                    key = tile_keys[i]
-                    st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
-                    st.markdown(f"<h4>{tiles_data[key]['title']}</h4><h2>{tiles_data[key]['count']}</h2>", unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
-            
-            for i in range(len(cols_r2_inner_2)):
-                with cols_r2_inner_2[i]:
-                    key = tile_keys[i+4]
-                    st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
-                    st.markdown(f"<h4>{tiles_data[key]['title']}</h4><h2>{tiles_data[key]['count']}</h2>", unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-
-        with col_r2_2:
-            st.markdown("#### Percentage of Talukas with Rainfall")
-            TOTAL_TALUKAS_GUJARAT = 251
-            num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
-            talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
-            pie_data = pd.DataFrame({
-                'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
-                'Count': [num_talukas_with_rain_today, talukas_without_rain]
-            })
-            fig_pie = px.pie(
-                pie_data,
-                values='Count',
-                names='Category',
-                color='Category',
-                color_discrete_map={
-                    'Talukas with Rainfall': '#28a745',
-                    'Talukas without Rainfall': '#dc3545'
-                }
-            )
-            fig_pie.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in pie_data['Category']])
-            fig_pie.update_layout(showlegend=False, height=350, margin=dict(l=0, r=0, t=40, b=0))
-            st.plotly_chart(fig_pie, use_container_width=True)
-
-        st.markdown("---")
-
-        # Third row: Top 10 Districts chart
+        # Second row: District Data
         st.markdown("### District-Level Rainfall Analysis")
         df_top_10_districts = df.groupby('District')['Total_mm'].mean().reset_index()
         df_top_10_districts = df_top_10_districts.sort_values(by='Total_mm', ascending=False).head(10)
@@ -449,6 +382,43 @@ def show_24_hourly_dashboard(df, selected_date):
             margin=dict(l=0, r=0, t=50, b=0)
         )
         st.plotly_chart(fig_bar_districts, use_container_width=True)
+
+        st.markdown("---")
+
+        # Third row: Taluka Analysis with Vertical Tiles
+        st.markdown("### Taluka-Level Rainfall Distribution")
+        col_r3_left, col_r3_right = st.columns([0.4, 0.6])
+
+        with col_r3_left:
+            st.markdown("#### Talukas by Rainfall Category")
+            tiles_data = generate_rainfall_category_tiles_data(df)
+            for tile in tiles_data:
+                st.markdown("<div class='tile-container'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='metric-tile'><h4>{tile['title']}</h4><h2>{tile['count']}</h2></div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        with col_r3_right:
+            st.markdown("#### Percentage of Talukas with Rainfall")
+            TOTAL_TALUKAS_GUJARAT = 251
+            num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
+            talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
+            pie_data = pd.DataFrame({
+                'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
+                'Count': [num_talukas_with_rain_today, talukas_without_rain]
+            })
+            fig_pie = px.pie(
+                pie_data,
+                values='Count',
+                names='Category',
+                color='Category',
+                color_discrete_map={
+                    'Talukas with Rainfall': '#28a745',
+                    'Talukas without Rainfall': '#dc3545'
+                }
+            )
+            fig_pie.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in pie_data['Category']])
+            fig_pie.update_layout(showlegend=False, height=450, margin=dict(l=0, r=0, t=40, b=0))
+            st.plotly_chart(fig_pie, use_container_width=True)
     
     st.markdown("---")
 

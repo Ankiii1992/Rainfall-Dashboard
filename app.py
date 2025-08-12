@@ -284,8 +284,18 @@ def show_24_hourly_dashboard(df, selected_date):
         if col not in df.columns:
             st.error(f"Required column '{col}' not found in the loaded data. Please check your Google Sheet headers for 24-hour data.")
             return
+            
+    # --- NEW: Add placeholder columns for new metrics ---
+    # The user must provide these columns in their actual data
+    if 'Total_Rainfall' not in df.columns:
+        df['Total_Rainfall'] = df['Total_mm'] * 1.5 # Example placeholder
+    if 'Percent_Against_Avg' not in df.columns:
+        df['Percent_Against_Avg'] = (df['Total_Rainfall'] / 700) * 100 # Example placeholder, assuming 700 is a seasonal avg
 
     df["Total_mm"] = pd.to_numeric(df["Total_mm"], errors='coerce')
+    df["Total_Rainfall"] = pd.to_numeric(df["Total_Rainfall"], errors='coerce')
+    df["Percent_Against_Avg"] = pd.to_numeric(df["Percent_Against_Avg"], errors='coerce')
+
 
     # --- NEW CODE START: District Name Standardization ---
     # Define mapping for known district name discrepancies
@@ -311,13 +321,13 @@ def show_24_hourly_dashboard(df, selected_date):
     # ---- NEW LAYOUT: METRICS & VISUALS ----
 
     # Calculate metrics
-    state_total_seasonal_avg = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
+    state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
     state_avg_24hr = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
     highest_taluka = df.loc[df["Total_mm"].idxmax()] if not df["Total_mm"].isnull().all() else pd.Series({'Taluka': 'N/A', 'Total_mm': 0, 'District': 'N/A'})
 
-    # Placeholder for Seasonal Average - you need to populate this from your data source
-    state_seasonal_target = 700.0 # Example value for demonstration
-    state_rainfall_progress_percentage = (state_total_seasonal_avg / state_seasonal_target) * 100 if state_seasonal_target > 0 else 0
+    # --- NEW: Use average of Percent_Against_Avg for the progress bar ---
+    state_rainfall_progress_percentage = df['Percent_Against_Avg'].mean() if not df["Percent_Against_Avg"].isnull().all() else 0.0
+
 
     highest_district_row = df.groupby('District')['Total_mm'].mean().reset_index().sort_values(by='Total_mm', ascending=False).iloc[0]
     highest_district = highest_district_row['District']
@@ -344,35 +354,33 @@ def show_24_hourly_dashboard(df, selected_date):
     
     st.markdown("---")
 
-    # --- NEW LAYOUT: Row 2 - Gauge and Distribution Charts ---
-    col_gauge, col_charts = st.columns([0.3, 0.7])
+    # --- NEW LAYOUT: Row 2 - Circular Progress Bar and Distribution Charts ---
+    col_progress, col_charts = st.columns([0.3, 0.7])
 
-    with col_gauge:
+    with col_progress:
         st.markdown("#### State Seasonal Avg. Rainfall Till Today (%)")
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
+        fig_progress = go.Figure(go.Indicator(
+            mode="gauge+number",
             value=state_rainfall_progress_percentage,
-            title={'text': "Rainfall Progress"},
-            domain={'x': [0, 1], 'y': [0, 1]},
             gauge={
-                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                'shape': 'angular',
+                'axis': {'range': [0, 100], 'visible': False},
                 'bar': {'color': "#28a745"},
                 'bgcolor': "white",
-                'borderwidth': 2,
-                'bordercolor': "gray",
+                'borderwidth': 0,
                 'steps': [
-                    {'range': [0, 25], 'color': "#ffe0e0"},
-                    {'range': [25, 50], 'color': "#fff5e0"},
-                    {'range': [50, 75], 'color': "#f0ffe0"},
-                    {'range': [75, 100], 'color': "#e0fff5"}
+                    {'range': [0, 100], 'color': "lightgray"}
                 ],
                 'threshold': {
                     'line': {'color': "red", 'width': 4},
                     'thickness': 0.75,
                     'value': 100}
-            }))
-        fig_gauge.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=20))
-        st.plotly_chart(fig_gauge, use_container_width=True)
+            },
+            number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
+        ))
+        fig_progress.update_layout(height=280, margin=dict(l=20, r=20, t=50, b=20),
+            paper_bgcolor="#f3f6fa")
+        st.plotly_chart(fig_progress, use_container_width=True)
 
     with col_charts:
         # Pie chart (re-used from old code)
@@ -398,7 +406,7 @@ def show_24_hourly_dashboard(df, selected_date):
         fig_pie.update_layout(showlegend=False, height=250, margin=dict(l=0, r=0, t=40, b=0))
         st.plotly_chart(fig_pie, use_container_width=True)
         
-        # New bar chart for taluka counts
+        # Bar chart for taluka counts
         rainfall_categories = {
             'Talukas > 200 mm': df[df['Total_mm'] > 200].shape[0],
             'Talukas > 150 mm': df[df['Total_mm'] > 150].shape[0],
@@ -545,44 +553,37 @@ def show_24_hourly_dashboard(df, selected_date):
         with insights_col_tal:
             st.markdown("#### Key Insights & Distributions (Talukas)")
 
-            category_counts_tal = df_map_talukas['Rainfall_Category'].value_counts().reset_index()
-            category_counts_tal.columns = ['Category', 'Count']
-            category_counts_tal['Category'] = pd.Categorical(
-                category_counts_tal['Category'],
-                categories=ordered_categories,
-                ordered=True
-            )
-            category_counts_tal = category_counts_tal.sort_values('Category')
-            category_counts_tal['Rainfall_Range'] = category_counts_tal['Category'].map(category_ranges)
+            # Bar chart for taluka counts (re-used from new layout)
+            rainfall_categories_tal = {
+                'Talukas > 200 mm': df[df['Total_mm'] > 200].shape[0],
+                'Talukas > 150 mm': df[df['Total_mm'] > 150].shape[0],
+                'Talukas > 100 mm': df[df['Total_mm'] > 100].shape[0],
+                'Talukas > 75 mm': df[df['Total_mm'] > 75].shape[0],
+                'Talukas > 50 mm': df[df['Total_mm'] > 50].shape[0],
+                'Talukas > 25 mm': df[df['Total_mm'] > 25].shape[0]
+            }
+            categories_df_tal = pd.DataFrame(list(rainfall_categories_tal.items()), columns=['Category', 'Count'])
 
-
-            fig_category_dist_tal = px.bar(
-                category_counts_tal,
+            fig_bar_tal = px.bar(
+                categories_df_tal,
                 x='Category',
                 y='Count',
-                title='Distribution of Talukas by Daily Rainfall Category',
+                title='Distribution of Talukas by Rainfall Intensity',
                 labels={'Count': 'Number of Talukas'},
-                color='Category',
-                color_discrete_map=color_map,
-                hover_data={
-                    'Category': True,
-                    'Rainfall_Range': True,
-                    'Count': True
-                }
+                color='Count',
+                color_continuous_scale=px.colors.sequential.YlGnBu,
+                text='Count'
             )
-            fig_category_dist_tal.update_layout(
-                xaxis=dict(
-                    tickmode='array',
-                    tickvals=category_counts_tal['Category'],
-                    ticktext=[cat for cat in category_counts_tal['Category']],
-                    tickangle=0
-                ),
+            fig_bar_tal.update_traces(texttemplate='%{text}', textposition='outside')
+            fig_bar_tal.update_layout(
                 xaxis_title=None,
+                yaxis_title=None,
+                xaxis_tickangle=-45,
                 showlegend=False,
-                height=350,
+                height=300,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            st.plotly_chart(fig_category_dist_tal, use_container_width=True)
+            st.plotly_chart(fig_bar_tal, use_container_width=True)
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")

@@ -252,20 +252,20 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
 # --- NEW: Function to generate rainfall category tiles ---
 def generate_rainfall_category_tiles(df):
     rainfall_categories = {
-        '25mm_plus': {'min': 25, 'max': 50},
-        '50mm_plus': {'min': 50, 'max': 75},
-        '75mm_plus': {'min': 75, 'max': 100},
-        '100mm_plus': {'min': 100, 'max': 125},
-        '125mm_plus': {'min': 125, 'max': 150},
-        '150mm_plus': {'min': 150, 'max': 175},
-        '175mm_plus': {'min': 175, 'max': 200},
-        '200mm_plus': {'min': 200, 'max': float('inf')}
+        '25mm_plus': {'min': 25, 'max': 50, 'title': '> 25 mm'},
+        '50mm_plus': {'min': 50, 'max': 75, 'title': '> 50 mm'},
+        '75mm_plus': {'min': 75, 'max': 100, 'title': '> 75 mm'},
+        '100mm_plus': {'min': 100, 'max': 125, 'title': '> 100 mm'},
+        '125mm_plus': {'min': 125, 'max': 150, 'title': '> 125 mm'},
+        '150mm_plus': {'min': 150, 'max': 175, 'title': '> 150 mm'},
+        '175mm_plus': {'min': 175, 'max': 200, 'title': '> 175 mm'},
+        '200mm_plus': {'min': 200, 'max': float('inf'), 'title': '> 200 mm'}
     }
 
     tiles_data = {}
     for key, val in rainfall_categories.items():
         count = df[(df['Total_mm'] >= val['min']) & (df['Total_mm'] < val['max'])].shape[0]
-        tiles_data[key] = count
+        tiles_data[key] = {'count': count, 'title': val['title']}
     
     return tiles_data
 
@@ -317,14 +317,19 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown("<div class='main-metric-tile'>", unsafe_allow_html=True)
         st.markdown("<h4>State Seasonal Avg. Rainfall Till Today (%)</h4>", unsafe_allow_html=True)
         
+        # Correctly implementing the full circular progress bar
         fig_progress = go.Figure(go.Indicator(
             mode="gauge+number",
             value=state_rainfall_progress_percentage,
+            domain={'x': [0, 1], 'y': [0, 1]},
             title={'text': ""},
             gauge={
                 'shape': 'angular',
                 'axis': {'range': [0, 100], 'visible': False},
-                'bar': {'color': "#1A73E8", 'thickness': 0.25},
+                'bar': {
+                    'color': "#1A73E8",
+                    'thickness': 0.25
+                },
                 'bgcolor': "#e0e0e0",
                 'borderwidth': 0,
             },
@@ -372,21 +377,27 @@ def show_24_hourly_dashboard(df, selected_date):
         with col_r2_1:
             st.markdown("#### Talukas by Rainfall Category")
             tiles_data = generate_rainfall_category_tiles(df)
-            cols_r2_inner = st.columns(4)
             
-            # Using the new tiles_data to display the counts
-            tile_titles = [
-                "> 25 mm", "> 50 mm", "> 75 mm", "> 100 mm",
-                "> 125 mm", "> 150 mm", "> 175 mm", "> 200 mm"
-            ]
+            # Using columns to create a grid of tiles for the categories
+            cols_r2_inner_1 = st.columns(4)
+            cols_r2_inner_2 = st.columns(4)
+            
             tile_keys = list(tiles_data.keys())
 
-            for i, col in enumerate(cols_r2_inner * 2):
-                if i < len(tile_titles):
-                    with col:
-                        st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
-                        st.markdown(f"<h4>{tile_titles[i]}</h4><h2>{tiles_data[tile_keys[i]]}</h2>", unsafe_allow_html=True)
-                        st.markdown("</div>", unsafe_allow_html=True)
+            for i in range(len(cols_r2_inner_1)):
+                with cols_r2_inner_1[i]:
+                    key = tile_keys[i]
+                    st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
+                    st.markdown(f"<h4>{tiles_data[key]['title']}</h4><h2>{tiles_data[key]['count']}</h2>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+            
+            for i in range(len(cols_r2_inner_2)):
+                with cols_r2_inner_2[i]:
+                    key = tile_keys[i+4]
+                    st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
+                    st.markdown(f"<h4>{tiles_data[key]['title']}</h4><h2>{tiles_data[key]['count']}</h2>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
 
         with col_r2_2:
             st.markdown("#### Percentage of Talukas with Rainfall")

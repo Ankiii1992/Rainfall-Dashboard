@@ -56,7 +56,7 @@ st.markdown("""
         transform: translateY(-4px);
         box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
-    /* Fixed text overflow issue */
+    /* Fix for text overflow and alignment within tiles */
     .metric-tile h4 {
         color: #01579b;
         font-size: 1.05rem;
@@ -91,6 +91,7 @@ st.markdown("""
         text-align: center;
         margin-bottom: 1rem;
     }
+    /* Single large box to balance the left column */
     .large-box {
         background: linear-gradient(135deg, #e3f2fd, #bbdefb);
         padding: 1.5rem;
@@ -104,8 +105,35 @@ st.markdown("""
         align-items: center;
         height: 100%;
     }
-    .tile-container {
-        padding: 0.5rem;
+    /* Flexbox layout for Taluka tiles to prevent overflow */
+    .taluka-tiles-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 0.5rem;
+    }
+    .taluka-tile {
+        flex: 1 1 30%; /* Three tiles per row */
+        max-width: 30%;
+        min-width: 90px;
+        background: linear-gradient(135deg, #f0faff, #e0f2f1);
+        padding: 0.8rem;
+        border-radius: 0.75rem;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+        text-align: center;
+        border: 1px solid #c5e1e9;
+    }
+    .taluka-tile h4 {
+        color: #01579b;
+        font-size: 0.8rem;
+        margin: 0;
+        line-height: 1.2;
+    }
+    .taluka-tile h2 {
+        font-size: 1.5rem;
+        color: #0077b6;
+        margin: 0;
+        font-weight: 700;
     }
 </style>
 <script>
@@ -410,13 +438,11 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown("#### Talukas by Rainfall Category")
             tiles_data = generate_rainfall_category_tiles_data(df)
             
-            # The 3-column, smaller tiles layout as requested
-            tile_cols = st.columns(3)
-            for i, tile in enumerate(tiles_data):
-                with tile_cols[i % 3]:
-                    st.markdown("<div class='tile-container'>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='metric-tile'><h4>{tile['title']}</h4><h2>{tile['count']}</h2></div>", unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
+            # The fixed 3-column, smaller tiles layout
+            st.markdown("<div class='taluka-tiles-container'>", unsafe_allow_html=True)
+            for tile in tiles_data:
+                st.markdown(f"<div class='taluka-tile'><h4>{tile['title']}</h4><h2>{tile['count']}</h2></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
         with col_r3_right:
             st.markdown("#### Percentage of Talukas with Rainfall")

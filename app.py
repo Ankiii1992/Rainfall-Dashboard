@@ -362,15 +362,19 @@ def show_24_hourly_dashboard(df, selected_date):
         fig_progress = go.Figure(go.Indicator(
             mode="gauge+number",
             value=state_rainfall_progress_percentage,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "", 'font': {'size': 20}},
             gauge={
                 'shape': 'angular',
                 'axis': {'range': [0, 100], 'visible': False},
                 'bar': {'color': "#3498db", 'line': {'color': '#1a237e', 'width': 2}}, # A solid blue for a better look
-                'bgcolor': "rgba(0,0,0,0)", # Transparent background
+                'bgcolor': "rgba(52, 152, 219, 0.2)", # Lighter blue for the unfilled portion
                 'borderwidth': 0,
-                'steps': [
-                    {'range': [0, 100], 'color': "rgba(52, 152, 219, 0.2)"} # Lighter blue for the unfilled portion
-                ]
+                'steps': [], # No steps for a clean progress bar
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': 100}
             },
             number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
         ))
@@ -528,7 +532,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            st.plotly_chart(fig_category_dist_dist, use_container_width=True)
+            st.plotly_chart(fig_category_dist_dist, use_container_width=True, key="district_insights_bar_chart")
 
 
     with tab_talukas:
@@ -544,42 +548,48 @@ def show_24_hourly_dashboard(df, selected_date):
                     geo_feature_id_key="properties.SUB_DISTRICT",
                     geo_location_col="Taluka"
                 )
-                st.plotly_chart(fig_map_talukas, use_container_width=True)
+                st.plotly_chart(fig_map_talukas, use_container_width=True, key="taluka_map_chart")
 
         with insights_col_tal:
             st.markdown("#### Key Insights & Distributions (Talukas)")
 
-            # Bar chart for taluka counts (re-used from new layout)
-            rainfall_categories_tal = {
-                'Talukas > 200 mm': df[df['Total_mm'] > 200].shape[0],
-                'Talukas > 150 mm': df[df['Total_mm'] > 150].shape[0],
-                'Talukas > 100 mm': df[df['Total_mm'] > 100].shape[0],
-                'Talukas > 75 mm': df[df['Total_mm'] > 75].shape[0],
-                'Talukas > 50 mm': df[df['Total_mm'] > 50].shape[0],
-                'Talukas > 25 mm': df[df['Total_mm'] > 25].shape[0]
-            }
-            categories_df_tal = pd.DataFrame(list(rainfall_categories_tal.items()), columns=['Category', 'Count'])
+            category_counts_tal = df_map_talukas['Rainfall_Category'].value_counts().reset_index()
+            category_counts_tal.columns = ['Category', 'Count']
+            category_counts_tal['Category'] = pd.Categorical(
+                category_counts_tal['Category'],
+                categories=ordered_categories,
+                ordered=True
+            )
+            category_counts_tal = category_counts_tal.sort_values('Category')
+            category_counts_tal['Rainfall_Range'] = category_counts_tal['Category'].map(category_ranges)
 
-            fig_bar_tal = px.bar(
-                categories_df_tal,
+            fig_category_dist_tal = px.bar(
+                category_counts_tal,
                 x='Category',
                 y='Count',
-                title='Distribution of Talukas by Rainfall Intensity',
+                title='Distribution of Talukas by Daily Rainfall Category',
                 labels={'Count': 'Number of Talukas'},
-                color='Count',
-                color_continuous_scale=px.colors.sequential.YlGnBu,
-                text='Count'
+                color='Category',
+                color_discrete_map=color_map,
+                hover_data={
+                    'Category': True,
+                    'Rainfall_Range': True,
+                    'Count': True
+                }
             )
-            fig_bar_tal.update_traces(texttemplate='%{text}', textposition='outside')
-            fig_bar_tal.update_layout(
+            fig_category_dist_tal.update_layout(
+                xaxis=dict(
+                    tickmode='array',
+                    tickvals=category_counts_tal['Category'],
+                    ticktext=[cat for cat in category_counts_tal['Category']],
+                    tickangle=0
+                ),
                 xaxis_title=None,
-                yaxis_title=None,
-                xaxis_tickangle=-45,
                 showlegend=False,
-                height=300,
+                height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            st.plotly_chart(fig_bar_tal, use_container_width=True, key="taluka_insights_bar_chart") # ADDED UNIQUE KEY
+            st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart") # Corrected Chart
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")

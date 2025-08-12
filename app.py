@@ -46,7 +46,7 @@ st.markdown("""
         text-align: center;
         transition: 0.3s ease;
         border: 1px solid #c5e1e9;
-        min-height: 120px; /* Adjusted min-height for better fit */
+        min-height: 120px;
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -56,22 +56,32 @@ st.markdown("""
         transform: translateY(-4px);
         box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
+    /* Fixed text overflow issue */
     .metric-tile h4 {
         color: #01579b;
         font-size: 1.05rem;
         margin-bottom: 0.2rem;
         line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .metric-tile h2 {
         font-size: 2.2rem;
         color: #0077b6;
         margin: 0.1rem 0 0.1rem 0;
         font-weight: 700;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .metric-tile p {
         margin: 0 0 0;
         font-size: 0.95rem;
         color: #37474f;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .main-metric-tile {
         background: linear-gradient(135deg, #e3f2fd, #bbdefb);
@@ -80,6 +90,19 @@ st.markdown("""
         box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
         text-align: center;
         margin-bottom: 1rem;
+    }
+    .large-box {
+        background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+        padding: 1.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        text-align: center;
+        margin-bottom: 1rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-around;
+        align-items: center;
+        height: 100%;
     }
     .tile-container {
         padding: 0.5rem;
@@ -295,11 +318,11 @@ def show_24_hourly_dashboard(df, selected_date):
     highest_district = highest_district_row['District']
     highest_district_avg = highest_district_row['Total_mm']
 
-    # --- NEW LAYOUT STARTS HERE ---
+    # --- FINAL LAYOUT IMPLEMENTATION ---
     col_left, col_right = st.columns([0.25, 0.75])
 
     with col_left:
-        # First tile: Circular progress bar
+        # Full circular progress bar for Seasonal Rainfall
         st.markdown("<div class='main-metric-tile'>", unsafe_allow_html=True)
         st.markdown("<h4>State Seasonal Avg. Rainfall Till Today (%)</h4>", unsafe_allow_html=True)
         
@@ -324,13 +347,9 @@ def show_24_hourly_dashboard(df, selected_date):
         st.plotly_chart(fig_progress, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Second tile: Total Seasonal Rainfall
-        st.markdown("<div class='main-metric-tile'>", unsafe_allow_html=True)
+        # Single, large box to balance vertical space
+        st.markdown("<div class='large-box'>", unsafe_allow_html=True)
         st.markdown(f"<h4>State Total Seasonal Rainfall Till Today (Avg.)</h4><h2>{state_total_seasonal_avg:.1f} mm</h2>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # Third tile: Avg Rain last 24 hrs
-        st.markdown("<div class='main-metric-tile'>", unsafe_allow_html=True)
         st.markdown(f"<h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -391,10 +410,10 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown("#### Talukas by Rainfall Category")
             tiles_data = generate_rainfall_category_tiles_data(df)
             
-            # Implementing the 3-column, smaller tiles layout
+            # The 3-column, smaller tiles layout as requested
             tile_cols = st.columns(3)
             for i, tile in enumerate(tiles_data):
-                with tile_cols[i % 3]: # Cycle through the 3 columns
+                with tile_cols[i % 3]:
                     st.markdown("<div class='tile-container'>", unsafe_allow_html=True)
                     st.markdown(f"<div class='metric-tile'><h4>{tile['title']}</h4><h2>{tile['count']}</h2></div>", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)

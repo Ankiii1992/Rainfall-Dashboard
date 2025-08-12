@@ -26,7 +26,6 @@ def load_geojson(path):
     st.error(f"GeoJSON file not found at: {path}")
     return None
 
-# --- NEW: Enhanced CSS for better alignment ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -143,21 +142,21 @@ ordered_categories = [
 ]
 
 def generate_rainfall_category_tiles_data(df):
-    rainfall_categories = {
-        '25mm_plus': {'min': 25, 'max': 50, 'title': '> 25 mm'},
-        '50mm_plus': {'min': 50, 'max': 75, 'title': '> 50 mm'},
-        '75mm_plus': {'min': 75, 'max': 100, 'title': '> 75 mm'},
-        '100mm_plus': {'min': 100, 'max': 125, 'title': '> 100 mm'},
-        '125mm_plus': {'min': 125, 'max': 150, 'title': '> 125 mm'},
-        '150mm_plus': {'min': 150, 'max': 175, 'title': '> 150 mm'},
-        '175mm_plus': {'min': 175, 'max': 200, 'title': '> 175 mm'},
-        '200mm_plus': {'min': 200, 'max': float('inf'), 'title': '> 200 mm'}
-    }
+    rainfall_categories = [
+        {'min': 25, 'max': 50, 'title': '> 25 mm'},
+        {'min': 50, 'max': 75, 'title': '> 50 mm'},
+        {'min': 75, 'max': 100, 'title': '> 75 mm'},
+        {'min': 100, 'max': 125, 'title': '> 100 mm'},
+        {'min': 125, 'max': 150, 'title': '> 125 mm'},
+        {'min': 150, 'max': 175, 'title': '> 150 mm'},
+        {'min': 175, 'max': 200, 'title': '> 175 mm'},
+        {'min': 200, 'max': float('inf'), 'title': '> 200 mm'}
+    ]
 
     tiles_data = []
-    for key, val in rainfall_categories.items():
-        count = df[(df['Total_mm'] >= val['min']) & (df['Total_mm'] < val['max'])].shape[0]
-        tiles_data.append({'title': val['title'], 'count': count})
+    for category in rainfall_categories:
+        count = df[(df['Total_mm'] >= category['min']) & (df['Total_mm'] < category['max'])].shape[0]
+        tiles_data.append({'title': category['title'], 'count': count})
     
     return tiles_data
 
@@ -304,7 +303,6 @@ def show_24_hourly_dashboard(df, selected_date):
         st.markdown("<div class='main-metric-tile'>", unsafe_allow_html=True)
         st.markdown("<h4>State Seasonal Avg. Rainfall Till Today (%)</h4>", unsafe_allow_html=True)
         
-        # Correctly implementing the full circular progress bar
         fig_progress = go.Figure(go.Indicator(
             mode="gauge+number",
             value=state_rainfall_progress_percentage,
@@ -385,17 +383,21 @@ def show_24_hourly_dashboard(df, selected_date):
 
         st.markdown("---")
 
-        # Third row: Taluka Analysis with Vertical Tiles
+        # Third row: Taluka Analysis with Horizontal Tiles in 3 columns
         st.markdown("### Taluka-Level Rainfall Distribution")
         col_r3_left, col_r3_right = st.columns([0.4, 0.6])
 
         with col_r3_left:
             st.markdown("#### Talukas by Rainfall Category")
             tiles_data = generate_rainfall_category_tiles_data(df)
-            for tile in tiles_data:
-                st.markdown("<div class='tile-container'>", unsafe_allow_html=True)
-                st.markdown(f"<div class='metric-tile'><h4>{tile['title']}</h4><h2>{tile['count']}</h2></div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Implementing the 3-column, smaller tiles layout
+            tile_cols = st.columns(3)
+            for i, tile in enumerate(tiles_data):
+                with tile_cols[i % 3]: # Cycle through the 3 columns
+                    st.markdown("<div class='tile-container'>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='metric-tile'><h4>{tile['title']}</h4><h2>{tile['count']}</h2></div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
 
         with col_r3_right:
             st.markdown("#### Percentage of Talukas with Rainfall")

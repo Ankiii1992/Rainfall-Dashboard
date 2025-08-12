@@ -365,16 +365,12 @@ def show_24_hourly_dashboard(df, selected_date):
             gauge={
                 'shape': 'angular',
                 'axis': {'range': [0, 100], 'visible': False},
-                'bar': {'color': "#28a745"},
-                'bgcolor': "white",
+                'bar': {'color': "#3498db", 'line': {'color': '#1a237e', 'width': 2}}, # A solid blue for a better look
+                'bgcolor': "rgba(0,0,0,0)", # Transparent background
                 'borderwidth': 0,
                 'steps': [
-                    {'range': [0, 100], 'color': "lightgray"}
-                ],
-                'threshold': {
-                    'line': {'color': "red", 'width': 4},
-                    'thickness': 0.75,
-                    'value': 100}
+                    {'range': [0, 100], 'color': "rgba(52, 152, 219, 0.2)"} # Lighter blue for the unfilled portion
+                ]
             },
             number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
         ))
@@ -583,7 +579,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=300,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            st.plotly_chart(fig_bar_tal, use_container_width=True)
+            st.plotly_chart(fig_bar_tal, use_container_width=True, key="taluka_insights_bar_chart") # ADDED UNIQUE KEY
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")

@@ -10,6 +10,7 @@ import os
 import io
 
 # ---------------------------- CONFIG ----------------------------
+# The functions to connect to Google Sheets and load GeoJSON remain the same
 @st.cache_resource
 def get_gsheet_client():
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -75,6 +76,15 @@ st.markdown("""
         font-size: 0.95rem;
         color: #37474f;
     }
+    .main-metric-tile {
+        background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+        padding: 1.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        text-align: center;
+        margin-bottom: 1rem;
+        height: auto;
+    }
 </style>
 
 <script>
@@ -84,6 +94,7 @@ st.markdown("""
 
 
 # ---------------------------- RAINFALL CATEGORY LOGIC ----------------------------
+# These helper functions for rainfall classification and color mapping are the same
 color_map = {
     "No Rain": "#f8f8f8",
     "Very Light": "#e0ffe0",
@@ -135,7 +146,7 @@ ordered_categories = [
 
 
 # ---------------------------- UTILITY FUNCTIONS ----------------------------
-
+# These utility functions for data loading, name correction, and plotting maps remain the same
 def generate_title_from_date(selected_date):
     start_date = (selected_date - timedelta(days=1)).strftime("%d-%m-%Y")
     end_date = selected_date.strftime("%d-%m-%Y")
@@ -153,6 +164,7 @@ def load_sheet_data(sheet_name, tab_name):
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
     except Exception as e:
+        st.error(f"Error loading data from sheet: {e}")
         return pd.DataFrame()
 
 def correct_taluka_names(df):
@@ -237,7 +249,28 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     )
     return fig
 
+# --- NEW: Function to generate rainfall category tiles ---
+def generate_rainfall_category_tiles(df):
+    rainfall_categories = {
+        '25mm_plus': {'min': 25, 'max': 50},
+        '50mm_plus': {'min': 50, 'max': 75},
+        '75mm_plus': {'min': 75, 'max': 100},
+        '100mm_plus': {'min': 100, 'max': 125},
+        '125mm_plus': {'min': 125, 'max': 150},
+        '150mm_plus': {'min': 150, 'max': 175},
+        '175mm_plus': {'min': 175, 'max': 200},
+        '200mm_plus': {'min': 200, 'max': float('inf')}
+    }
 
+    tiles_data = {}
+    for key, val in rainfall_categories.items():
+        count = df[(df['Total_mm'] >= val['min']) & (df['Total_mm'] < val['max'])].shape[0]
+        tiles_data[key] = count
+    
+    return tiles_data
+
+# ---------------------------- DASHBOARD LAYOUT FUNCTIONS ----------------------------
+# This is the main function where the layout changes are implemented
 def show_24_hourly_dashboard(df, selected_date):
     df = correct_taluka_names(df)
     if "Rain_Last_24_Hrs" in df.columns:
@@ -276,34 +309,14 @@ def show_24_hourly_dashboard(df, selected_date):
     highest_district = highest_district_row['District']
     highest_district_avg = highest_district_row['Total_mm']
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>State Total Seasonal Rainfall Till Today (Avg.)</h4><h2>{state_total_seasonal_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall District (Talukas Avg.)</h4><h2>{highest_district}</h2><p>({highest_district_avg:.1f} mm)</p></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col4:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Total_mm']:.1f} mm)</p></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    st.markdown("---")
+    # --- NEW LAYOUT STARTS HERE ---
+    col_left, col_right = st.columns([0.25, 0.75])
 
-    col_progress, col_charts = st.columns([0.3, 0.7])
-
-    with col_progress:
-        st.markdown("#### State Seasonal Avg. Rainfall Till Today (%)")
+    with col_left:
+        # First tile: Circular progress bar
+        st.markdown("<div class='main-metric-tile'>", unsafe_allow_html=True)
+        st.markdown("<h4>State Seasonal Avg. Rainfall Till Today (%)</h4>", unsafe_allow_html=True)
         
-        # --- NEW & CORRECTED CODE: Full circular progress bar with a thicker, solid track ---
-        # The goal is to create a true circle by setting 'gauge.shape' to 'angular' and 'gauge.axis' range from 0 to 100, but using two separate traces to ensure a full circular track.
-        # This new method will correctly display a full 360-degree circle with a thick track and a central value.
         fig_progress = go.Figure(go.Indicator(
             mode="gauge+number",
             value=state_rainfall_progress_percentage,
@@ -311,71 +324,97 @@ def show_24_hourly_dashboard(df, selected_date):
             gauge={
                 'shape': 'angular',
                 'axis': {'range': [0, 100], 'visible': False},
-                'bar': {'color': "#1A73E8", 'line': {'color': '#1a237e', 'width': 2}},
-                'bgcolor': "rgba(235, 235, 235, 0.5)",
-                'borderwidth': 0,
-                'steps': [],
-            },
-            number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
-        ))
-        fig_progress.update_layout(height=280, margin=dict(l=20, r=20, t=50, b=20),
-            paper_bgcolor="#f3f6fa")
-
-        # To create a full circle, we can use a scatterpolar trace as an overlay for the track.
-        # This is a robust method to ensure a full 360-degree circle visually.
-        fig_progress = go.Figure()
-
-        # Add the progress trace (the blue filling part)
-        fig_progress.add_trace(go.Indicator(
-            mode="gauge+number",
-            value=state_rainfall_progress_percentage,
-            title={'text': ""},
-            domain={'x': [0, 1], 'y': [0, 1]},
-            gauge={
-                'shape': 'angular',
-                'axis': {'range': [0, 100], 'visible': False},
-                'bar': {
-                    'color': "#1A73E8",
-                    'thickness': 0.25 # Adjust the thickness
-                },
+                'bar': {'color': "#1A73E8", 'thickness': 0.25},
                 'bgcolor': "#e0e0e0",
                 'borderwidth': 0,
             },
             number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
         ))
-
-        fig_progress.update_layout(
-            height=280,
-            margin=dict(l=20, r=20, t=50, b=20),
-            paper_bgcolor="#f3f6fa",
-            polar={'bgcolor': '#f3f6fa', 'radialaxis': {'range': [0, 1], 'visible': False}}
-        )
-
+        fig_progress.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="#e3f2fd")
         st.plotly_chart(fig_progress, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    with col_charts:
-        TOTAL_TALUKAS_GUJARAT = 251
-        num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
-        talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
-        pie_data = pd.DataFrame({
-            'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
-            'Count': [num_talukas_with_rain_today, talukas_without_rain]
-        })
-        fig_pie = px.pie(
-            pie_data,
-            values='Count',
-            names='Category',
-            title="Percentage of Talukas with Daily Rainfall",
-            color='Category',
-            color_discrete_map={
-                'Talukas with Rainfall': '#28a745',
-                'Talukas without Rainfall': '#dc3545'
-            }
-        )
-        fig_pie.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in pie_data['Category']])
-        fig_pie.update_layout(showlegend=False, height=250, margin=dict(l=0, r=0, t=40, b=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
+        # Second tile: Total Seasonal Rainfall
+        st.markdown("<div class='main-metric-tile'>", unsafe_allow_html=True)
+        st.markdown(f"<h4>State Total Seasonal Rainfall Till Today (Avg.)</h4><h2>{state_total_seasonal_avg:.1f} mm</h2>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Third tile: Avg Rain last 24 hrs
+        st.markdown("<div class='main-metric-tile'>", unsafe_allow_html=True)
+        st.markdown(f"<h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_right:
+        # First row of tiles
+        st.markdown("### Key Metrics")
+        col_r1_1, col_r1_2, col_r1_3 = st.columns(3)
+        with col_r1_1:
+            st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
+            st.markdown(f"<h4>Highest Rainfall District (Avg.)</h4><h2>{highest_district}</h2><p>({highest_district_avg:.1f} mm)</p>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col_r1_2:
+            st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
+            st.markdown(f"<h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Total_mm']:.1f} mm)</p>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col_r1_3:
+            TOTAL_TALUKAS_GUJARAT = 251
+            num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
+            st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
+            st.markdown(f"<h4>Total Talukas with Rainfall</h4><h2>{num_talukas_with_rain_today}</h2><p>out of {TOTAL_TALUKAS_GUJARAT}</p>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
         
+        st.markdown("---")
+
+        # Second row with Taluka category tiles and Pie Chart
+        st.markdown("### Taluka-Level Rainfall Distribution")
+        col_r2_1, col_r2_2 = st.columns([0.6, 0.4])
+
+        with col_r2_1:
+            st.markdown("#### Talukas by Rainfall Category")
+            tiles_data = generate_rainfall_category_tiles(df)
+            cols_r2_inner = st.columns(4)
+            
+            # Using the new tiles_data to display the counts
+            tile_titles = [
+                "> 25 mm", "> 50 mm", "> 75 mm", "> 100 mm",
+                "> 125 mm", "> 150 mm", "> 175 mm", "> 200 mm"
+            ]
+            tile_keys = list(tiles_data.keys())
+
+            for i, col in enumerate(cols_r2_inner * 2):
+                if i < len(tile_titles):
+                    with col:
+                        st.markdown("<div class='metric-tile'>", unsafe_allow_html=True)
+                        st.markdown(f"<h4>{tile_titles[i]}</h4><h2>{tiles_data[tile_keys[i]]}</h2>", unsafe_allow_html=True)
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+        with col_r2_2:
+            st.markdown("#### Percentage of Talukas with Rainfall")
+            TOTAL_TALUKAS_GUJARAT = 251
+            num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
+            talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
+            pie_data = pd.DataFrame({
+                'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
+                'Count': [num_talukas_with_rain_today, talukas_without_rain]
+            })
+            fig_pie = px.pie(
+                pie_data,
+                values='Count',
+                names='Category',
+                color='Category',
+                color_discrete_map={
+                    'Talukas with Rainfall': '#28a745',
+                    'Talukas without Rainfall': '#dc3545'
+                }
+            )
+            fig_pie.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in pie_data['Category']])
+            fig_pie.update_layout(showlegend=False, height=350, margin=dict(l=0, r=0, t=40, b=0))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        st.markdown("---")
+
+        # Third row: Top 10 Districts chart
+        st.markdown("### District-Level Rainfall Analysis")
         df_top_10_districts = df.groupby('District')['Total_mm'].mean().reset_index()
         df_top_10_districts = df_top_10_districts.sort_values(by='Total_mm', ascending=False).head(10)
 
@@ -402,8 +441,8 @@ def show_24_hourly_dashboard(df, selected_date):
     
     st.markdown("---")
 
+    # The maps and data tables below the new layout are the same
     st.markdown("### 🗺️ Rainfall Distribution Overview")
-
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
         columns={'Total_mm': 'District_Avg_Rain_Last_24_Hrs'}
@@ -549,7 +588,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart") # Corrected Chart
+            st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart")
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
@@ -635,12 +674,9 @@ tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends
 
 with tab_daily:
     st.header("Daily Rainfall Summary")
-
     sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_24hr = f"master24hrs_{selected_date_str}"
-
     df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
-
     if not df_24hr.empty:
         show_24_hourly_dashboard(df_24hr, selected_date)
     else:
@@ -650,23 +686,17 @@ with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_2hr = f"2hrs_master_{selected_date_str}"
-
     df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
-
     if not df_2hr.empty:
         df_2hr = correct_taluka_names(df_2hr)
         df_2hr.columns = df_2hr.columns.str.strip()
-
         time_slot_columns = [col for col in df_2hr.columns if "TO" in col and df_2hr[col].dtype in ['int64', 'float64', 'object']]
         time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
                            '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
         existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
-
         for col in existing_order:
             df_2hr[col] = pd.to_numeric(df_2hr[col], errors="coerce")
-
         df_2hr['Total_mm'] = df_2hr[existing_order].sum(axis=1)
-
         df_long = df_2hr.melt(
             id_vars=["District", "Taluka", "Total_mm"],
             value_vars=existing_order,
@@ -675,12 +705,10 @@ with tab_hourly:
         )
         df_long = df_long.dropna(subset=["Rainfall (mm)"])
         df_long['Taluka'] = df_long['Taluka'].str.strip()
-
         df_long = df_long.groupby(["District", "Taluka", "Time Slot"], as_index=False).agg({
             "Rainfall (mm)": "sum",
             "Total_mm": "first"
         })
-
         slot_labels = {
             "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10TO12": "10–12 AM",
             "12TO14": "12–2 PM", "14TO16": "2–4 PM", "16TO18": "4–6 PM",
@@ -693,35 +721,26 @@ with tab_hourly:
             ordered=True
         )
         df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
-
         df_2hr['Total_mm'] = pd.to_numeric(df_2hr['Total_mm'], errors='coerce')
-
         top_taluka_row = df_2hr.sort_values(by='Total_mm', ascending=False).iloc[0] if not df_2hr['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
         df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
         top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
         num_talukas_with_rain_hourly = df_2hr[df_2hr['Total_mm'] > 0].shape[0]
-
         st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
-
         row1 = st.columns(3)
-
         last_slot_label = slot_labels[existing_order[-1]]
-
         row1_titles = [
             ("Total Talukas with Rainfall", num_talukas_with_rain_hourly),
             ("Top Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
             (f"Top Taluka in last 2 hour ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
         ]
-
         for col, (label, value) in zip(row1, row1_titles):
             with col:
                 st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
                 st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
-
         st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval")
         selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
-
         if selected_talukas:
             plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
             fig = px.line(
@@ -740,12 +759,10 @@ with tab_hourly:
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Please select at least one Taluka to view the rainfall trend.")
-
         st.markdown("### 📋 Full 2-Hourly Rainfall Data Table")
         df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
         df_display_2hr.index += 1
         st.dataframe(df_display_2hr, use_container_width=True, height=600)
-
     else:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 

@@ -301,57 +301,36 @@ def show_24_hourly_dashboard(df, selected_date):
     with col_progress:
         st.markdown("#### State Seasonal Avg. Rainfall Till Today (%)")
         
-        # --- NEW & CORRECTED CODE: Full circular progress bar with a thicker, solid track ---
-        # The goal is to create a true circle by setting 'gauge.shape' to 'angular' and 'gauge.axis' range from 0 to 100, but using two separate traces to ensure a full circular track.
-        # This new method will correctly display a full 360-degree circle with a thick track and a central value.
-        fig_progress = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=state_rainfall_progress_percentage,
-            title={'text': ""},
-            gauge={
-                'shape': 'angular',
-                'axis': {'range': [0, 100], 'visible': False},
-                'bar': {'color': "#1A73E8", 'line': {'color': '#1a237e', 'width': 2}},
-                'bgcolor': "rgba(235, 235, 235, 0.5)",
-                'borderwidth': 0,
-                'steps': [],
-            },
-            number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
-        ))
-        fig_progress.update_layout(height=280, margin=dict(l=20, r=20, t=50, b=20),
-            paper_bgcolor="#f3f6fa")
+        # --- NEW CODE: Donut Chart ---
+        donut_data = pd.DataFrame({
+            'Category': ['Completed', 'Remaining'],
+            'Value': [state_rainfall_progress_percentage, 100 - state_rainfall_progress_percentage]
+        })
+        
+        fig_donut = go.Figure(data=[go.Pie(
+            labels=donut_data['Category'],
+            values=donut_data['Value'],
+            hole=0.7,  # This makes it a donut chart
+            marker_colors=['#1A73E8', '#e0e0e0'],
+            hoverinfo="none",
+            textinfo="none"
+        )])
 
-        # To create a full circle, we can use a scatterpolar trace as an overlay for the track.
-        # This is a robust method to ensure a full 360-degree circle visually.
-        fig_progress = go.Figure()
-
-        # Add the progress trace (the blue filling part)
-        fig_progress.add_trace(go.Indicator(
-            mode="gauge+number",
-            value=state_rainfall_progress_percentage,
-            title={'text': ""},
-            domain={'x': [0, 1], 'y': [0, 1]},
-            gauge={
-                'shape': 'angular',
-                'axis': {'range': [0, 100], 'visible': False},
-                'bar': {
-                    'color': "#1A73E8",
-                    'thickness': 0.25 # Adjust the thickness
-                },
-                'bgcolor': "#e0e0e0",
-                'borderwidth': 0,
-            },
-            number={'suffix': "%", 'font': {'color': '#1a237e', 'size': 50}},
-        ))
-
-        fig_progress.update_layout(
+        fig_donut.update_layout(
             height=280,
             margin=dict(l=20, r=20, t=50, b=20),
             paper_bgcolor="#f3f6fa",
-            polar={'bgcolor': '#f3f6fa', 'radialaxis': {'range': [0, 1], 'visible': False}}
+            showlegend=False,
+            annotations=[dict(
+                text=f"<b>{state_rainfall_progress_percentage:.1f}%</b>",
+                x=0.5, y=0.5,
+                font_size=50,
+                showarrow=False,
+                font_color='#1a237e'
+            )]
         )
+        st.plotly_chart(fig_donut, use_container_width=True)
 
-        st.plotly_chart(fig_progress, use_container_width=True)
 
     with col_charts:
         TOTAL_TALUKAS_GUJARAT = 251

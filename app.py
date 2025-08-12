@@ -301,7 +301,7 @@ def show_24_hourly_dashboard(df, selected_date):
     with col_progress:
         st.markdown("#### State Seasonal Avg. Rainfall Till Today (%)")
         
-        # --- NEW CODE: Donut Chart ---
+        # --- NEW CODE: Donut Chart with transparent background, green fill, and smaller font ---
         donut_data = pd.DataFrame({
             'Category': ['Completed', 'Remaining'],
             'Value': [state_rainfall_progress_percentage, 100 - state_rainfall_progress_percentage]
@@ -310,21 +310,21 @@ def show_24_hourly_dashboard(df, selected_date):
         fig_donut = go.Figure(data=[go.Pie(
             labels=donut_data['Category'],
             values=donut_data['Value'],
-            hole=0.7,  # This makes it a donut chart
-            marker_colors=['#1A73E8', '#e0e0e0'],
+            hole=0.6,  # This makes the donut ring thicker
+            marker_colors=['#28a745', '#e0e0e0'], # Green for completion, gray for remaining
             hoverinfo="none",
             textinfo="none"
         )])
 
         fig_donut.update_layout(
-            height=280,
+            height=300, # Increased height for a bigger chart
             margin=dict(l=20, r=20, t=50, b=20),
-            paper_bgcolor="#f3f6fa",
+            paper_bgcolor='rgba(0,0,0,0)', # Transparent background
             showlegend=False,
             annotations=[dict(
                 text=f"<b>{state_rainfall_progress_percentage:.1f}%</b>",
                 x=0.5, y=0.5,
-                font_size=50,
+                font_size=40, # Smaller font size
                 showarrow=False,
                 font_color='#1a237e'
             )]

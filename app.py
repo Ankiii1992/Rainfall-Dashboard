@@ -57,7 +57,7 @@ st.markdown("""
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -163,6 +163,7 @@ def correct_taluka_names(df):
     df['Taluka'] = df['Taluka'].replace(taluka_name_mapping)
     return df
 
+# MODIFIED: plot_choropleth function to include watermark and bold labels
 def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
@@ -218,7 +219,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
             "Rainfall_Category":False
         },
         height=650,
-        title=title
+        title=f"<b>{title}</b>"
     )
     fig.update_layout(
         margin={"r":0,"t":0,"l":0,"b":0},
@@ -230,10 +231,23 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
             y=-0.15,
             xanchor="center",
             x=0.5,
-            title_text="Rainfall Categories (mm)",
+            title_text="<b>Rainfall Categories (mm)</b>",
             font=dict(size=10),
             itemsizing='constant',
-        )
+        ),
+        # ADDED: Watermark annotation
+        annotations=[
+            go.layout.Annotation(
+                text="<b>Gujarat Weatherman</b>",
+                xref="paper", yref="paper",
+                x=0.99, y=0.01,
+                showarrow=False,
+                font=dict(size=14, color="rgba(0,0,0,0.3)"),
+                xanchor='right', yanchor='bottom'
+            )
+        ],
+        # MODIFIED: Remove download button from modebar
+        modebar=dict(remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
     )
     return fig
 
@@ -266,7 +280,7 @@ def show_24_hourly_dashboard(df, selected_date):
     df['District'] = df['District'].astype(str).str.strip()
 
     title = generate_title_from_date(selected_date)
-    st.subheader(title)
+    st.subheader(f"<b>{title}</b>", unsafe_allow_html=True) # MODIFIED: make subheader bold
     st.markdown("---")
 
 
@@ -286,7 +300,7 @@ def show_24_hourly_dashboard(df, selected_date):
     col_donut, col_metrics = st.columns([0.3, 0.7])
 
     with col_donut:
-        st.markdown("<h4 style='text-align: center;'>State Seasonal Avg. Rainfall Till Today (%)</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='text-align: center;'><b>State Seasonal Avg. Rainfall Till Today (%)</b></h4>", unsafe_allow_html=True)
         donut_data = pd.DataFrame({
             'Category': ['Completed', 'Remaining'],
             'Value': [state_rainfall_progress_percentage, 100 - state_rainfall_progress_percentage]
@@ -309,6 +323,7 @@ def show_24_hourly_dashboard(df, selected_date):
             margin=dict(l=20, r=20, t=50, b=20),
             paper_bgcolor='rgba(0,0,0,0)',
             showlegend=False,
+            # MODIFIED: make annotation bold
             annotations=[dict(
                 text=f"<b>{state_rainfall_progress_percentage:.1f}%</b>",
                 x=0.5, y=0.5,
@@ -324,31 +339,31 @@ def show_24_hourly_dashboard(df, selected_date):
         col_top1, col_top2 = st.columns(2)
         with col_top1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-            st.markdown(f"<div class='metric-tile'><h4>State Total Seasonal Rainfall Till Today (Avg.)</h4><h2>{state_total_seasonal_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4><b>State Total Seasonal Rainfall Till Today (Avg.)</b></h4><h2>{state_total_seasonal_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
         with col_top2:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-            st.markdown(f"<div class='metric-tile'><h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4><b>State Avg. Rain (last 24 hrs)</b></h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
         # Bottom Row of Tiles
         col_bottom1, col_bottom2, col_bottom3 = st.columns(3)
         with col_bottom1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-            st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall District (Talukas Avg.)</h4><h2>{highest_district}</h2><p>({highest_district_avg:.1f} mm)</p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4><b>Highest Rainfall District (Talukas Avg.)</b></h4><h2>{highest_district}</h2><p>({highest_district_avg:.1f} mm)</p></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
         with col_bottom2:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-            st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Total_mm']:.1f} mm)</p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4><b>Highest Rainfall Taluka</b></h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Total_mm']:.1f} mm)</p></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
         with col_bottom3:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-            st.markdown(f"<div class='metric-tile'><h4>Talukas with Rainfall Today</h4><h2>{num_talukas_with_rain_today}</h2><p>({TOTAL_TALUKAS_GUJARAT} Total Talukas)</p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4><b>Talukas with Rainfall Today</b></h4><h2>{num_talukas_with_rain_today}</h2><p>({TOTAL_TALUKAS_GUJARAT} Total Talukas)</p></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
     
     st.markdown("---")
 
-    st.markdown("### 🗺️ Rainfall Distribution Overview")
+    st.markdown("### 🗺️ <b>Rainfall Distribution Overview</b>", unsafe_allow_html=True)
 
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
@@ -388,7 +403,7 @@ def show_24_hourly_dashboard(df, selected_date):
         map_col_dist, insights_col_dist = st.columns([0.5, 0.5])
 
         with map_col_dist:
-            st.markdown("#### Gujarat Rainfall Map (by District)")
+            st.markdown("#### <b>Gujarat Rainfall Map (by District)</b>", unsafe_allow_html=True)
             with st.spinner("Loading district map..."):
                 fig_map_districts = plot_choropleth(
                     district_rainfall_avg_df,
@@ -400,7 +415,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 st.plotly_chart(fig_map_districts, use_container_width=True)
 
         with insights_col_dist:
-            st.markdown("#### Key Insights & Distributions (Districts)")
+            st.markdown("#### <b>Key Insights & Distributions (Districts)</b>", unsafe_allow_html=True)
 
             category_counts_dist = district_rainfall_avg_df['Rainfall_Category'].value_counts().reset_index()
             category_counts_dist.columns = ['Category', 'Count']
@@ -416,8 +431,8 @@ def show_24_hourly_dashboard(df, selected_date):
                 category_counts_dist,
                 x='Category',
                 y='Count',
-                title='Distribution of Districts by Daily Rainfall Category',
-                labels={'Count': 'Number of Districts'},
+                title='<b>Distribution of Districts by Daily Rainfall Category</b>',
+                labels={'Count': '<b>Number of Districts</b>'},
                 color='Category',
                 color_discrete_map=color_map,
                 hover_data={
@@ -430,14 +445,18 @@ def show_24_hourly_dashboard(df, selected_date):
                 xaxis=dict(
                     tickmode='array',
                     tickvals=category_counts_dist['Category'],
-                    ticktext=[cat for cat in category_counts_dist['Category']],
-                    tickangle=0
+                    ticktext=[f"<b>{cat}</b>" for cat in category_counts_dist['Category']],
+                    tickangle=-45
                 ),
                 xaxis_title=None,
+                yaxis_title="<b>Number of Districts</b>",
                 showlegend=False,
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
+            fig_category_dist_dist.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
+            fig_category_dist_dist.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
+
             st.plotly_chart(fig_category_dist_dist, use_container_width=True, key="district_insights_bar_chart")
 
 
@@ -445,7 +464,7 @@ def show_24_hourly_dashboard(df, selected_date):
         map_col_tal, insights_col_tal = st.columns([0.5, 0.5])
 
         with map_col_tal:
-            st.markdown("#### Gujarat Rainfall Map (by Taluka)")
+            st.markdown("#### <b>Gujarat Rainfall Map (by Taluka)</b>", unsafe_allow_html=True)
             with st.spinner("Loading taluka map..."):
                 fig_map_talukas = plot_choropleth(
                     df_map_talukas,
@@ -457,7 +476,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 st.plotly_chart(fig_map_talukas, use_container_width=True, key="taluka_map_chart")
 
         with insights_col_tal:
-            st.markdown("#### Key Insights & Distributions (Talukas)")
+            st.markdown("#### <b>Key Insights & Distributions (Talukas)</b>", unsafe_allow_html=True)
             
             # Moved pie chart here
             TOTAL_TALUKAS_GUJARAT = 251
@@ -471,7 +490,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 pie_data,
                 values='Count',
                 names='Category',
-                title="Percentage of Talukas with Daily Rainfall",
+                title="<b>Percentage of Talukas with Daily Rainfall</b>",
                 color='Category',
                 color_discrete_map={
                     'Talukas with Rainfall': '#28a745',
@@ -480,6 +499,7 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             fig_pie.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in pie_data['Category']])
             fig_pie.update_layout(showlegend=False, height=250, margin=dict(l=0, r=0, t=40, b=0))
+            fig_pie.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
             st.plotly_chart(fig_pie, use_container_width=True)
 
             category_counts_tal = df_map_talukas['Rainfall_Category'].value_counts().reset_index()
@@ -496,8 +516,8 @@ def show_24_hourly_dashboard(df, selected_date):
                 category_counts_tal,
                 x='Category',
                 y='Count',
-                title='Distribution of Talukas by Daily Rainfall Category',
-                labels={'Count': 'Number of Talukas'},
+                title='<b>Distribution of Talukas by Daily Rainfall Category</b>',
+                labels={'Count': '<b>Number of Talukas</b>'},
                 color='Category',
                 color_discrete_map=color_map,
                 hover_data={
@@ -510,18 +530,21 @@ def show_24_hourly_dashboard(df, selected_date):
                 xaxis=dict(
                     tickmode='array',
                     tickvals=category_counts_tal['Category'],
-                    ticktext=[cat for cat in category_counts_tal['Category']],
-                    tickangle=0
+                    ticktext=[f"<b>{cat}</b>" for cat in category_counts_tal['Category']],
+                    tickangle=-45
                 ),
                 xaxis_title=None,
+                yaxis_title="<b>Number of Talukas</b>",
                 showlegend=False,
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
+            fig_category_dist_tal.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
+            fig_category_dist_tal.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
             st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart")
 
     st.markdown("---")
-    st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
+    st.markdown("### 🏆 <b>Top 10 Talukas by Total Rainfall</b>", unsafe_allow_html=True)
     df_top_10 = df.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
 
     if not df_top_10.empty:
@@ -531,23 +554,26 @@ def show_24_hourly_dashboard(df, selected_date):
             y='Total_mm',
             color='Total_mm',
             color_continuous_scale=px.colors.sequential.Bluyl,
-            labels={'Total_mm': 'Total Rainfall (mm)'},
+            labels={'Total_mm': '<b>Total Rainfall (mm)</b>', 'Taluka':'<b>Taluka</b>'},
             hover_data=['District'],
             text='Total_mm',
-            title='Top 10 Talukas with Highest Total Daily Rainfall'
+            title='<b>Top 10 Talukas with Highest Total Daily Rainfall</b>'
         )
-        fig_top_10.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+        fig_top_10.update_traces(texttemplate='<b>%{text:.1f}</b>', textposition='outside', hovertemplate='<b>%{x}</b><br>District: %{customdata[0]}<br>Total Rainfall (mm): %{y:.1f}<extra></extra>')
         fig_top_10.update_layout(
             xaxis_tickangle=-45,
             showlegend=False,
             margin=dict(t=50),
-            coloraxis_showscale=False
+            coloraxis_showscale=False,
+            yaxis_title="<b>Total Rainfall (mm)</b>",
+            xaxis_title="<b>Taluka</b>"
         )
+        fig_top_10.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
         st.plotly_chart(fig_top_10, use_container_width=True)
     else:
         st.info("No rainfall data available to determine top 10 talukas.")
 
-    st.subheader("📋 Full Daily Rainfall Data Table")
+    st.subheader("📋 <b>Full Daily Rainfall Data Table</b>", unsafe_allow_html=True)
     df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
@@ -555,9 +581,10 @@ def show_24_hourly_dashboard(df, selected_date):
 # ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
 st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
-
+# ADDED: Copyright/branding
+st.markdown("<h6 style='text-align: right; color: #757575; margin-top: -10px; margin-bottom: 20px;'>Developed by <b>Ankit Patel (Gujarat Weatherman)</b></h6>", unsafe_allow_html=True)
 st.markdown("---")
-st.subheader("🗓️ Select Date for Rainfall Data")
+st.subheader("🗓️ <b>Select Date for Rainfall Data</b>", unsafe_allow_html=True)
 
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.today().date()
@@ -603,7 +630,7 @@ selected_date_str = selected_date.strftime("%Y-%m-%d")
 tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
 
 with tab_daily:
-    st.header("Daily Rainfall Summary")
+    st.header("<b>Daily Rainfall Summary</b>", unsafe_allow_html=True)
 
     sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_24hr = f"master24hrs_{selected_date_str}"
@@ -616,7 +643,7 @@ with tab_daily:
         st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_hourly:
-    st.header("Hourly Rainfall Trends (2-Hourly)")
+    st.header("<b>Hourly Rainfall Trends (2-Hourly)</b>", unsafe_allow_html=True)
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_2hr = f"2hrs_master_{selected_date_str}"
 
@@ -670,7 +697,7 @@ with tab_hourly:
         top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
         num_talukas_with_rain_hourly = df_2hr[df_2hr['Total_mm'] > 0].shape[0]
 
-        st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
+        st.markdown(f"#### 📊 <b>Latest data available for time interval: **{slot_labels[existing_order[-1]]}**</b>", unsafe_allow_html=True)
 
         row1 = st.columns(3)
 
@@ -685,10 +712,10 @@ with tab_hourly:
         for col, (label, value) in zip(row1, row1_titles):
             with col:
                 st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-                st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='metric-tile'><h4><b>{label}</b></h4><h2>{value}</h2></div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval")
+        st.markdown("### 📈 <b>Rainfall Trend by 2 hourly Time Interval</b>", unsafe_allow_html=True)
         selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
 
         if selected_talukas:
@@ -700,17 +727,19 @@ with tab_hourly:
                 color="Taluka",
                 markers=True,
                 text="Rainfall (mm)",
-                title="Rainfall Trend Over Time for Selected Talukas",
-                labels={"Rainfall (mm)": "Rainfall (mm)"}
+                title="<b>Rainfall Trend Over Time for Selected Talukas</b>",
+                labels={"Rainfall (mm)": "<b>Rainfall (mm)</b>", "Time Slot Label": "<b>Time Slot</b>"}
             )
-            fig.update_traces(textposition="top center")
-            fig.update_layout(showlegend=True)
-            fig.update_layout(modebar_remove=['toImage'])
+            fig.update_traces(texttemplate='<b>%{text:.1f}</b>', textposition="top center", hovertemplate='<b>%{text:.1f}</b>')
+            fig.update_layout(showlegend=True,
+                xaxis_title="<b>Time Slot</b>",
+                yaxis_title="<b>Rainfall (mm)</b>")
+            fig.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Please select at least one Taluka to view the rainfall trend.")
 
-        st.markdown("### 📋 Full 2-Hourly Rainfall Data Table")
+        st.markdown("### 📋 <b>Full 2-Hourly Rainfall Data Table</b>", unsafe_allow_html=True)
         df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
         df_display_2hr.index += 1
         st.dataframe(df_display_2hr, use_container_width=True, height=600)
@@ -719,5 +748,5 @@ with tab_hourly:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
 with tab_historical:
-    st.header("Historical Rainfall Data")
+    st.header("<b>Historical Rainfall Data</b>", unsafe_allow_html=True)
     st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")

@@ -267,6 +267,8 @@ def show_24_hourly_dashboard(df, selected_date):
 
     title = generate_title_from_date(selected_date)
     st.subheader(title)
+    st.markdown("---")
+
 
     state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
     state_avg_24hr = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
@@ -275,33 +277,16 @@ def show_24_hourly_dashboard(df, selected_date):
     highest_district_row = df.groupby('District')['Total_mm'].mean().reset_index().sort_values(by='Total_mm', ascending=False).iloc[0]
     highest_district = highest_district_row['District']
     highest_district_avg = highest_district_row['Total_mm']
-
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>State Total Seasonal Rainfall Till Today (Avg.)</h4><h2>{state_total_seasonal_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall District (Talukas Avg.)</h4><h2>{highest_district}</h2><p>({highest_district_avg:.1f} mm)</p></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col4:
-        st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-        st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Total_mm']:.1f} mm)</p></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
     
-    st.markdown("---")
+    # New tile: "Talukas with Rainfall"
+    TOTAL_TALUKAS_GUJARAT = 251
+    num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
 
-    col_progress, col_charts = st.columns([0.3, 0.7])
+    # --- NEW: Donut Chart and Metrics in two columns ---
+    col_donut, col_metrics = st.columns([0.3, 0.7])
 
-    with col_progress:
-        st.markdown("#### State Seasonal Avg. Rainfall Till Today (%)")
-        
-        # --- UPDATED CODE: Donut Chart with improved aesthetics ---
+    with col_donut:
+        st.markdown("<h4 style='text-align: center;'>State Seasonal Avg. Rainfall Till Today (%)</h4>", unsafe_allow_html=True)
         donut_data = pd.DataFrame({
             'Category': ['Completed', 'Remaining'],
             'Value': [state_rainfall_progress_percentage, 100 - state_rainfall_progress_percentage]
@@ -310,17 +295,17 @@ def show_24_hourly_dashboard(df, selected_date):
         fig_donut = go.Figure(data=[go.Pie(
             labels=donut_data['Category'],
             values=donut_data['Value'],
-            hole=0.7, # Adjusted hole for a slightly thinner ring
+            hole=0.7,
             marker=dict(
                 colors=['#28a745', '#e0e0e0'],
-                line=dict(color='white', width=4) # White border for a cleaner look
+                line=dict(color='white', width=4)
             ),
             hoverinfo="none",
             textinfo="none"
         )])
 
         fig_donut.update_layout(
-            height=320, # Increased height for a bigger chart
+            height=320,
             margin=dict(l=20, r=20, t=50, b=20),
             paper_bgcolor='rgba(0,0,0,0)',
             showlegend=False,
@@ -329,58 +314,37 @@ def show_24_hourly_dashboard(df, selected_date):
                 x=0.5, y=0.5,
                 font_size=40,
                 showarrow=False,
-                font_color='#01579b' # Matching font color with the h4 tags in the tiles
+                font_color='#01579b'
             )]
         )
         st.plotly_chart(fig_donut, use_container_width=True)
 
+    with col_metrics:
+        # Top Row of Tiles
+        col_top1, col_top2 = st.columns(2)
+        with col_top1:
+            st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4>State Total Seasonal Rainfall Till Today (Avg.)</h4><h2>{state_total_seasonal_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col_top2:
+            st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-    with col_charts:
-        TOTAL_TALUKAS_GUJARAT = 251
-        num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
-        talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
-        pie_data = pd.DataFrame({
-            'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
-            'Count': [num_talukas_with_rain_today, talukas_without_rain]
-        })
-        fig_pie = px.pie(
-            pie_data,
-            values='Count',
-            names='Category',
-            title="Percentage of Talukas with Daily Rainfall",
-            color='Category',
-            color_discrete_map={
-                'Talukas with Rainfall': '#28a745',
-                'Talukas without Rainfall': '#dc3545'
-            }
-        )
-        fig_pie.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in pie_data['Category']])
-        fig_pie.update_layout(showlegend=False, height=250, margin=dict(l=0, r=0, t=40, b=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
-        
-        df_top_10_districts = df.groupby('District')['Total_mm'].mean().reset_index()
-        df_top_10_districts = df_top_10_districts.sort_values(by='Total_mm', ascending=False).head(10)
-
-        fig_bar_districts = px.bar(
-            df_top_10_districts,
-            x='District',
-            y='Total_mm',
-            title='Top 10 Districts by Average Daily Rainfall',
-            labels={'Total_mm': 'Average Rainfall (mm)'},
-            color='Total_mm',
-            color_continuous_scale=px.colors.sequential.Bluyl,
-            text='Total_mm'
-        )
-        fig_bar_districts.update_traces(texttemplate='%{text:.1f}', textposition='outside')
-        fig_bar_districts.update_layout(
-            xaxis_title=None,
-            yaxis_title=None,
-            xaxis_tickangle=-45,
-            showlegend=False,
-            height=300,
-            margin=dict(l=0, r=0, t=50, b=0)
-        )
-        st.plotly_chart(fig_bar_districts, use_container_width=True)
+        # Bottom Row of Tiles
+        col_bottom1, col_bottom2, col_bottom3 = st.columns(3)
+        with col_bottom1:
+            st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall District (Talukas Avg.)</h4><h2>{highest_district}</h2><p>({highest_district_avg:.1f} mm)</p></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col_bottom2:
+            st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4>Highest Rainfall Taluka</h4><h2>{highest_taluka['Taluka']}</h2><p>({highest_taluka['Total_mm']:.1f} mm)</p></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col_bottom3:
+            st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4>Talukas with Rainfall Today</h4><h2>{num_talukas_with_rain_today}</h2><p>({TOTAL_TALUKAS_GUJARAT} Total Talukas)</p></div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
     
     st.markdown("---")
 
@@ -494,6 +458,29 @@ def show_24_hourly_dashboard(df, selected_date):
 
         with insights_col_tal:
             st.markdown("#### Key Insights & Distributions (Talukas)")
+            
+            # Moved pie chart here
+            TOTAL_TALUKAS_GUJARAT = 251
+            num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
+            talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
+            pie_data = pd.DataFrame({
+                'Category': ['Talukas with Rainfall', 'Talukas without Rainfall'],
+                'Count': [num_talukas_with_rain_today, talukas_without_rain]
+            })
+            fig_pie = px.pie(
+                pie_data,
+                values='Count',
+                names='Category',
+                title="Percentage of Talukas with Daily Rainfall",
+                color='Category',
+                color_discrete_map={
+                    'Talukas with Rainfall': '#28a745',
+                    'Talukas without Rainfall': '#dc3545'
+                }
+            )
+            fig_pie.update_traces(textinfo='percent+label', pull=[0.05 if cat == 'Talukas with Rainfall' else 0 for cat in pie_data['Category']])
+            fig_pie.update_layout(showlegend=False, height=250, margin=dict(l=0, r=0, t=40, b=0))
+            st.plotly_chart(fig_pie, use_container_width=True)
 
             category_counts_tal = df_map_talukas['Rainfall_Category'].value_counts().reset_index()
             category_counts_tal.columns = ['Category', 'Count']
@@ -531,7 +518,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart") # Corrected Chart
+            st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart")
 
     st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")

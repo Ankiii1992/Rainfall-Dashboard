@@ -649,7 +649,6 @@ with tab_hourly:
             categories=[slot_labels[s] for s in existing_order],
             ordered=True
         )
-        df_long['Rainfall_Category'] = df_long['Rainfall (mm)'].apply(classify_rainfall)
         
         df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 
@@ -693,48 +692,20 @@ with tab_hourly:
                 text="Rainfall (mm)",
                 title="Rainfall Trend Over Time for Selected Talukas",
                 labels={"Rainfall (mm)": "Rainfall (mm)"},
-                hover_data={
-                    "Taluka": False,
-                    "Rainfall (mm)": ":.1f",
-                    "Rainfall_Category": True
-                }
             )
             
             fig.update_traces(
+                line=dict(width=4),
                 texttemplate='%{y:.1f}',
                 textposition='top center',
                 hovertemplate="""
-                    <b>%{customdata[0]}</b><br><br>
+                    <b>%{fullData.name}</b><br>
                     Time Slot: %{x}<br>
-                    Rainfall: %{y:.1f} mm<br>
-                    Category: %{customdata[1]}
+                    Rainfall: %{y:.1f} mm
                 """,
-                customdata=plot_df[['Taluka', 'Rainfall_Category']]
+                textfont=dict(size=16, family="Arial Black")
             )
             
-            # --- NEW: Add horizontal lines for thresholds ---
-            # Using the boundary of each category from the classify_rainfall function
-            thresholds = {
-                "Very Light (2.4 mm)": 2.4,
-                "Light (7.5 mm)": 7.5,
-                "Moderate (35.5 mm)": 35.5,
-                "Rather Heavy (64.4 mm)": 64.4,
-                "Heavy (124.4 mm)": 124.4,
-                "Very Heavy (244.4 mm)": 244.4,
-                "Extremely Heavy (350 mm)": 350
-            }
-            
-            for label, value in thresholds.items():
-                fig.add_hline(
-                    y=value,
-                    line_dash="dot",
-                    line_color="darkred",
-                    annotation_text=label,
-                    annotation_position="top left",
-                    annotation_font_size=12,
-                    annotation_font_color="darkred"
-                )
-
             fig.update_layout(showlegend=True)
             fig.update_layout(modebar_remove=['toImage'])
             fig.update_yaxes(rangemode='nonnegative')

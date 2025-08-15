@@ -7,35 +7,21 @@ from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime, timedelta
 import os
-import numpy as np
+import io
 
 # ---------------------------- CONFIG ----------------------------
-
-st.set_page_config(layout="wide", page_title="Rainfall Dashboard")
-
 @st.cache_resource
 def get_gsheet_client():
-    """Establishes and caches a secure connection to Google Sheets."""
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_dict = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     return gspread.authorize(creds)
 
 @st.cache_resource
-def load_geojson(path, geo_key):
-    """
-    Loads and caches GeoJSON data. 
-    It also performs ID cleaning once to improve performance on subsequent calls.
-    """
+def load_geojson(path):
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
-        
-        # Pre-process IDs: clean them once and for all
-        for feature in geojson_data["features"]:
-            if geo_key in feature['properties']:
-                feature['properties'][geo_key] = str(feature['properties'][geo_key]).strip().lower()
-
         return geojson_data
     st.error(f"GeoJSON file not found at: {path}")
     return None
@@ -64,14 +50,14 @@ st.markdown("""
         text-align: center;
         transition: 0.3s ease;
         border: 1px solid #c5e1e9;
-        height: 165px;
+        height: 165px; /* Adjusted height for consistency */
         display: flex;
         flex-direction: column;
         justify-content: center;
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -122,6 +108,26 @@ category_ranges = {
     "Exceptional": "> 350 mm"
 }
 
+def classify_rainfall(rainfall):
+    if pd.isna(rainfall) or rainfall == 0:
+        return "No Rain"
+    elif rainfall > 0 and rainfall <= 2.4:
+        return "Very Light"
+    elif rainfall <= 7.5:
+        return "Light"
+    elif rainfall <= 35.5:
+        return "Moderate"
+    elif rainfall <= 64.4:
+        return "Rather Heavy"
+    elif rainfall <= 124.4:
+        return "Heavy"
+    elif rainfall <= 244.4:
+        return "Very Heavy"
+    elif rainfall <= 350:
+        return "Extremely Heavy"
+    else:
+        return "Exceptional"
+
 ordered_categories = [
     "No Rain", "Very Light", "Light", "Moderate", "Rather Heavy",
     "Heavy", "Very Heavy", "Extremely Heavy", "Exceptional"
@@ -135,9 +141,7 @@ def generate_title_from_date(selected_date):
     end_date = selected_date.strftime("%d-%m-%Y")
     return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
 
-@st.cache_data(ttl=3600)
 def load_sheet_data(sheet_name, tab_name):
-    """Loads and caches data from a specific tab of a Google Sheet."""
     try:
         client = get_gsheet_client()
         sheet = client.open(sheet_name).worksheet(tab_name)
@@ -149,104 +153,83 @@ def load_sheet_data(sheet_name, tab_name):
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
     except Exception as e:
-        st.error(f"Error loading data from Google Sheet: {e}")
         return pd.DataFrame()
 
 def correct_taluka_names(df):
-    """Applies a mapping to correct known Taluka name inconsistencies."""
     taluka_name_mapping = {
         "Morbi": "Morvi", "Ahmedabad City": "Ahmadabad City", "Maliya Hatina": "Malia",
         "Shihor": "Sihor", "Dwarka": "Okhamandal", "Kalol(Gnr)": "Kalol",
     }
     df['Taluka'] = df['Taluka'].replace(taluka_name_mapping)
-    
-    district_name_mapping = {
-        "Chhota Udepur": "Chhota Udaipur", "Dangs": "Dang",
-        "Kachchh": "Kutch", "Mahesana": "Mehsana",
-    }
-    df['District'] = df['District'].replace(district_name_mapping)
-    df['District'] = df['District'].astype(str).str.strip()
     return df
 
-# --- MODIFIED: Optimized plot_choropleth function with px.choropleth_mapbox ---
-def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_col, color_map, ordered_categories):
-    """
-    Generates a choropleth map using Plotly Express, leveraging the cached GeoJSON.
-    Uses numpy.select for fast rainfall classification and a more efficient data join.
-    """
-    geojson_data = load_geojson(geojson_path, geo_feature_id_key.split('.')[-1])
+# --- MODIFIED: plot_choropleth function using multiple go.Choroplethmapbox traces ---
+def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_col):
+    geojson_data = load_geojson(geojson_path)
     if not geojson_data:
-        st.error("Failed to load GeoJSON data.")
         return go.Figure()
 
     df_plot = df.copy()
-
-    # Normalize the location column in the DataFrame for joining
-    df_plot[geo_location_col] = df_plot[geo_location_col].astype(str).str.strip().str.lower()
     
+    if geo_location_col == "Taluka":
+        df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
+    elif geo_location_col == "District":
+        df_plot["District"] = df_plot["District"].astype(str).str.strip().str.lower()
+
     color_column = None
     if 'Total_mm' in df_plot.columns:
         color_column = 'Total_mm'
     elif 'District_Avg_Rain_Last_24_Hrs' in df_plot.columns:
         color_column = 'District_Avg_Rain_Last_24_Hrs'
     else:
-        st.warning("Cannot determine rainfall column. Map may not display categories correctly.")
+        st.warning("Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization. Map may not display categories correctly.")
         df_plot["Rainfall_Category"] = "No Rain"
         color_column = "Rainfall_Category"
 
-    # --- OPTIMIZATION: Use numpy.select for vectorized classification ---
-    if color_column and color_column in df_plot.columns:
+    if color_column:
         df_plot[color_column] = pd.to_numeric(df_plot[color_column], errors='coerce')
-        
-        conditions = [
-            (df_plot[color_column].isna()) | (df_plot[color_column] == 0),
-            (df_plot[color_column] > 0) & (df_plot[color_column] <= 2.4),
-            (df_plot[color_column] > 2.4) & (df_plot[color_column] <= 7.5),
-            (df_plot[color_column] > 7.5) & (df_plot[color_column] <= 35.5),
-            (df_plot[color_column] > 35.5) & (df_plot[color_column] <= 64.4),
-            (df_plot[color_column] > 64.4) & (df_plot[color_column] <= 124.4),
-            (df_plot[color_column] > 124.4) & (df_plot[color_column] <= 244.4),
-            (df_plot[color_column] > 244.4) & (df_plot[color_column] <= 350),
-            (df_plot[color_column] > 350)
-        ]
-        
-        choices = ordered_categories
-        df_plot["Rainfall_Category"] = np.select(conditions, choices, default="No Rain")
-
+        df_plot["Rainfall_Category"] = df_plot[color_column].apply(classify_rainfall)
         df_plot["Rainfall_Category"] = pd.Categorical(
             df_plot["Rainfall_Category"],
             categories=ordered_categories,
             ordered=True
         )
-    
-    # Check if the geojson_data is valid before plotting
-    if not geojson_data or not geojson_data.get("features"):
-        return go.Figure()
-        
-    fig = px.choropleth_mapbox(
-        df_plot,
-        geojson=geojson_data,
-        locations=geo_location_col,
-        featureidkey=geo_feature_id_key,
-        color="Rainfall_Category",
-        color_discrete_map=color_map,
-        hover_name=geo_location_col,
-        hover_data={
-            "Rainfall_Category": True,
-            color_column: ":.1f" if color_column else False
-        },
-        mapbox_style="open-street-map",
-        zoom=6,
-        center={"lat": 22.5, "lon": 71.5},
-        opacity=0.75,
-        title=title,
-        height=650
-    )
+
+    fig = go.Figure()
+
+    # Create a separate trace for each category
+    for cat in ordered_categories:
+        df_category = df_plot[df_plot['Rainfall_Category'] == cat]
+        if not df_category.empty:
+            fig.add_trace(
+                go.Choroplethmapbox(
+                    geojson=geojson_data,
+                    locations=df_category[geo_location_col].tolist(),
+                    featureidkey=geo_feature_id_key,
+                    marker_line_width=1,
+                    marker_line_color='black',
+                    marker_opacity=0.75,
+                    z=df_category["Rainfall_Category"].cat.codes,
+                    colorscale=[[0, color_map[cat]], [1, color_map[cat]]], # This forces a solid color
+                    # name=f"{cat} ({category_ranges[cat]})", # This is not needed because of the legend below
+                    hovertemplate='<b>%{location}</b><br>'
+                                  +f'{cat}<br>'
+                                  +f'Rainfall: %{{customdata[1]:.1f}} mm<extra></extra>',
+                    customdata=df_category[[geo_location_col, color_column]].values,
+                    showscale=False,
+                )
+            )
 
     fig.update_layout(
+        mapbox_style="open-street-map",
+        mapbox_zoom=6,
+        mapbox_center={"lat": 22.5, "lon": 71.5},
+        height=650,
         margin={"r":0,"t":0,"l":0,"b":0},
         uirevision='true',
         showlegend=True,
+        title=title,
+        # Create a legend with the discrete categories
         legend=dict(
             orientation="h",
             yanchor="top",
@@ -259,10 +242,22 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
         )
     )
 
+    # Add dummy traces for the legend to show discrete categories
+    for i, cat in enumerate(ordered_categories):
+        fig.add_trace(go.Scattermapbox(
+            lat=[None], lon=[None],
+            mode='markers',
+            marker=go.scattermapbox.Marker(
+                size=0,
+                color=color_map[cat],
+            ),
+            name=f"{cat} ({category_ranges[cat]})"
+        ))
+
     return fig
 
+
 def show_24_hourly_dashboard(df, selected_date):
-    """Displays the main 24-hour rainfall dashboard."""
     df = correct_taluka_names(df)
     if "Rain_Last_24_Hrs" in df.columns:
         df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
@@ -282,25 +277,31 @@ def show_24_hourly_dashboard(df, selected_date):
     df["Total_Rainfall"] = pd.to_numeric(df["Total_Rainfall"], errors='coerce')
     df["Percent_Against_Avg"] = pd.to_numeric(df["Percent_Against_Avg"], errors='coerce')
     
+    district_name_mapping = {
+        "Chhota Udepur": "Chhota Udaipur", "Dangs": "Dang",
+        "Kachchh": "Kutch", "Mahesana": "Mehsana",
+    }
+    df['District'] = df['District'].replace(district_name_mapping)
+    df['District'] = df['District'].astype(str).str.strip()
+
     title = generate_title_from_date(selected_date)
     st.subheader(title)
     st.markdown("---")
+
 
     state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
     state_avg_24hr = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
     highest_taluka = df.loc[df["Total_mm"].idxmax()] if not df["Total_mm"].isnull().all() else pd.Series({'Taluka': 'N/A', 'Total_mm': 0, 'District': 'N/A'})
     state_rainfall_progress_percentage = df['Percent_Against_Avg'].mean() if not df["Percent_Against_Avg"].isnull().all() else 0.0
+    highest_district_row = df.groupby('District')['Total_mm'].mean().reset_index().sort_values(by='Total_mm', ascending=False).iloc[0]
+    highest_district = highest_district_row['District']
+    highest_district_avg = highest_district_row['Total_mm']
     
-    highest_district_row = pd.DataFrame()
-    if not df.empty and 'District' in df.columns and 'Total_mm' in df.columns:
-        highest_district_row = df.groupby('District')['Total_mm'].mean().reset_index().sort_values(by='Total_mm', ascending=False).iloc[0]
-    
-    highest_district = highest_district_row['District'] if not highest_district_row.empty else 'N/A'
-    highest_district_avg = highest_district_row['Total_mm'] if not highest_district_row.empty else 0
-    
+    # New tile: "Talukas with Rainfall"
     TOTAL_TALUKAS_GUJARAT = 251
     num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
 
+    # --- NEW: Donut Chart and Metrics in two columns ---
     col_donut, col_metrics = st.columns([0.3, 0.7])
 
     with col_donut:
@@ -338,6 +339,7 @@ def show_24_hourly_dashboard(df, selected_date):
         st.plotly_chart(fig_donut, use_container_width=True)
 
     with col_metrics:
+        # Top Row of Tiles
         col_top1, col_top2 = st.columns(2)
         with col_top1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -348,6 +350,7 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown(f"<div class='metric-tile'><h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
+        # Bottom Row of Tiles
         col_bottom1, col_bottom2, col_bottom3 = st.columns(3)
         with col_bottom1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -370,22 +373,7 @@ def show_24_hourly_dashboard(df, selected_date):
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
         columns={'Total_mm': 'District_Avg_Rain_Last_24_Hrs'}
     )
-    
-    # --- OPTIMIZATION: Use numpy.select for vectorized classification ---
-    conditions_dist = [
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'].isna()) | (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] == 0),
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] > 0) & (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] <= 2.4),
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] <= 7.5),
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] <= 35.5),
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] <= 64.4),
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] <= 124.4),
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] <= 244.4),
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] <= 350),
-        (district_rainfall_avg_df['District_Avg_Rain_Last_24_Hrs'] > 350)
-    ]
-    choices_dist = ordered_categories
-    district_rainfall_avg_df["Rainfall_Category"] = np.select(conditions_dist, choices_dist, default="No Rain")
-    
+    district_rainfall_avg_df["Rainfall_Category"] = district_rainfall_avg_df["District_Avg_Rain_Last_24_Hrs"].apply(classify_rainfall)
     district_rainfall_avg_df["Rainfall_Category"] = pd.Categorical(
         district_rainfall_avg_df["Rainfall_Category"],
         categories=ordered_categories,
@@ -396,22 +384,7 @@ def show_24_hourly_dashboard(df, selected_date):
 
     df_map_talukas = df.copy()
     df_map_talukas["Taluka"] = df_map_talukas["Taluka"].str.strip().str.lower()
-    
-    # --- OPTIMIZATION: Use numpy.select for vectorized classification ---
-    conditions_tal = [
-        (df_map_talukas['Total_mm'].isna()) | (df_map_talukas['Total_mm'] == 0),
-        (df_map_talukas['Total_mm'] > 0) & (df_map_talukas['Total_mm'] <= 2.4),
-        (df_map_talukas['Total_mm'] <= 7.5),
-        (df_map_talukas['Total_mm'] <= 35.5),
-        (df_map_talukas['Total_mm'] <= 64.4),
-        (df_map_talukas['Total_mm'] <= 124.4),
-        (df_map_talukas['Total_mm'] <= 244.4),
-        (df_map_talukas['Total_mm'] <= 350),
-        (df_map_talukas['Total_mm'] > 350)
-    ]
-    choices_tal = ordered_categories
-    df_map_talukas["Rainfall_Category"] = np.select(conditions_tal, choices_tal, default="No Rain")
-    
+    df_map_talukas["Rainfall_Category"] = df_map_talukas["Total_mm"].apply(classify_rainfall)
     df_map_talukas["Rainfall_Category"] = pd.Categorical(
         df_map_talukas["Rainfall_Category"],
         categories=ordered_categories,
@@ -420,6 +393,7 @@ def show_24_hourly_dashboard(df, selected_date):
     df_map_talukas["Rainfall_Range"] = df_map_talukas["Rainfall_Category"].map(category_ranges)
 
     tab_districts, tab_talukas = st.tabs(["Rainfall Distribution by Districts", "Rainfall Distribution by Talukas"])
+
 
     with tab_districts:
         map_col_dist, insights_col_dist = st.columns([0.5, 0.5])
@@ -432,9 +406,7 @@ def show_24_hourly_dashboard(df, selected_date):
                     "gujarat_district_clean.geojson",
                     title="Gujarat Daily Rainfall Distribution by District",
                     geo_feature_id_key="properties.district",
-                    geo_location_col="District",
-                    color_map=color_map, 
-                    ordered_categories=ordered_categories
+                    geo_location_col="District"
                 )
                 st.plotly_chart(fig_map_districts, use_container_width=True)
 
@@ -486,20 +458,20 @@ def show_24_hourly_dashboard(df, selected_date):
         with map_col_tal:
             st.markdown("#### Gujarat Rainfall Map (by Taluka)")
             with st.spinner("Loading taluka map..."):
+                # GeoJSON is not loaded here, but passed to the function
                 fig_map_talukas = plot_choropleth(
                     df_map_talukas,
                     "gujarat_taluka_clean.geojson",
                     title="Gujarat Daily Rainfall Distribution by Taluka",
                     geo_feature_id_key="properties.SUB_DISTRICT",
-                    geo_location_col="Taluka",
-                    color_map=color_map, 
-                    ordered_categories=ordered_categories
+                    geo_location_col="Taluka"
                 )
                 st.plotly_chart(fig_map_talukas, use_container_width=True, key="taluka_map_chart")
 
         with insights_col_tal:
             st.markdown("#### Key Insights & Distributions (Talukas)")
             
+            # Moved pie chart here
             TOTAL_TALUKAS_GUJARAT = 251
             num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
             talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
@@ -595,6 +567,7 @@ def show_24_hourly_dashboard(df, selected_date):
 # ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
 
+# Use columns for a flexible header layout
 title_col, dev_col = st.columns([0.7, 0.3])
 
 with title_col:
@@ -647,12 +620,14 @@ selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
+# The order of the with blocks is what determines which tab loads first.
+# This has been corrected to place "Hourly Trends" first.
 tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
 
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_2hr = f"master24hrs_{selected_date_str}" # Assumed tab name based on your data structure
+    tab_name_2hr = f"2hrs_master_{selected_date_str}"
 
     df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
 

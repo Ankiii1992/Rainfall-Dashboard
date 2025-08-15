@@ -416,7 +416,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 category_counts_dist,
                 x='Category',
                 y='Count',
-                title='Distribution of Districts by Daily Rainfall Category',
+                title='Distribution of Districts by Rainfall Category',
                 labels={'Count': 'Number of Districts'},
                 color='Category',
                 color_discrete_map=color_map,
@@ -450,7 +450,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 fig_map_talukas = plot_choropleth(
                     df_map_talukas,
                     "gujarat_taluka_clean.geojson",
-                    title="Gujarat Daily Rainfall Distribution by Taluka",
+                    title="Gujarat Rainfall Distribution by Taluka",
                     geo_feature_id_key="properties.SUB_DISTRICT",
                     geo_location_col="Taluka"
                 )
@@ -547,7 +547,7 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         st.info("No rainfall data available to determine top 10 talukas.")
 
-    st.subheader("📋 Full Daily Rainfall Data Table")
+    st.subheader("📋 Daily Rainfall Data Table")
     df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
@@ -665,8 +665,8 @@ with tab_hourly:
 
         row1_titles = [
             ("Total Talukas with Rainfall", num_talukas_with_rain_hourly),
-            ("Top Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
-            (f"Top Taluka in last 2 hour ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
+            ("Highest Rainfall Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
+            (f"Highest Rainfall in last 2 hours ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
         ]
 
         for col, (label, value) in zip(row1, row1_titles):
@@ -697,7 +697,7 @@ with tab_hourly:
         else:
             st.info("Please select at least one Taluka to view the rainfall trend.")
 
-        st.markdown("### 📋 Full 2-Hourly Rainfall Data Table")
+        st.markdown("### 📋2-Hourly Rainfall Data Table")
         df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
         df_display_2hr.index += 1
         st.dataframe(df_display_2hr, use_container_width=True, height=600)

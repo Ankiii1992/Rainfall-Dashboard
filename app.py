@@ -237,11 +237,11 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
         hover_name=geo_location_col,
-        # UPDATED: Added Rainfall_Range to hover_data
+        # UPDATED: Added Rainfall_Category and Rainfall_Range to hover_data
         hover_data={
             color_column: ":.1f mm",
             "District": True if geo_location_col == "Taluka" else False,
-            "Rainfall_Category":False,
+            "Rainfall_Category": True,  # Re-added the category to the hover data
             "Rainfall_Range": True
         },
         height=650,
@@ -445,9 +445,11 @@ def show_24_hourly_dashboard(df, selected_date):
                 text='Count' # Add text to the bars
             )
             # FIXED: Corrected hovertemplate to show Rainfall Range on bar chart
+            # CHANGED: textposition to inside to show count between the bars
             fig_category_dist_dist.update_traces(
                 texttemplate='<b>%{text}</b>', 
-                textposition='outside', 
+                textposition='inside',
+                textfont=dict(color='white'),
                 hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
                 customdata=category_counts_dist[['Rainfall_Range']]
             )
@@ -532,9 +534,11 @@ def show_24_hourly_dashboard(df, selected_date):
                 text='Count' # Add text to the bars
             )
             # FIXED: Corrected hovertemplate to show Rainfall Range on bar chart
+            # CHANGED: textposition to inside to show count between the bars
             fig_category_dist_tal.update_traces(
                 texttemplate='<b>%{text}</b>', 
-                textposition='outside', 
+                textposition='inside',
+                textfont=dict(color='white'),
                 hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
                 customdata=category_counts_tal[['Rainfall_Range']]
             )

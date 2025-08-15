@@ -600,7 +600,7 @@ selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
+tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
 
 with tab_daily:
     st.header("Daily Rainfall Summary")

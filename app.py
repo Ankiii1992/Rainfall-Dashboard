@@ -608,20 +608,9 @@ selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
+# The order of the with blocks is what determines which tab loads first.
+# This has been corrected to place "Hourly Trends" first.
 tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
-
-with tab_daily:
-    st.header("Daily Rainfall Summary")
-
-    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_24hr = f"master24hrs_{selected_date_str}"
-
-    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
-
-    if not df_24hr.empty:
-        show_24_hourly_dashboard(df_24hr, selected_date)
-    else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
@@ -725,6 +714,19 @@ with tab_hourly:
 
     else:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
+
+with tab_daily:
+    st.header("Daily Rainfall Summary")
+
+    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name_24hr = f"master24hrs_{selected_date_str}"
+
+    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
+
+    if not df_24hr.empty:
+        show_24_hourly_dashboard(df_24hr, selected_date)
+    else:
+        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_historical:
     st.header("Historical Rainfall Data")

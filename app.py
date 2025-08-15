@@ -164,6 +164,9 @@ def load_sheet_data(sheet_name, tab_name):
         else:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
+    except gspread.exceptions.WorksheetNotFound as e:
+        # Gracefully handle the case where the worksheet does not exist
+        return pd.DataFrame()
     except Exception as e:
         st.error(f"Error loading data from Google Sheet: {e}")
         return pd.DataFrame()
@@ -437,14 +440,15 @@ def show_24_hourly_dashboard(df, selected_date):
                 labels={'Count': '<b>Number of Districts</b>'},
                 color='Category',
                 color_discrete_map=color_map,
-                hover_data={
-                    'Category': True,
-                    'Rainfall_Range': True,
-                    'Count': True
-                }
+                text='Count' # Add text to the bars
             )
-            # FIX: Ensure hoverdata is correctly displayed
-            fig_category_dist_dist.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
+            # FIX: Reverted change to include Rainfall Range in hovertext
+            fig_category_dist_dist.update_traces(
+                texttemplate='<b>%{text}</b>', 
+                textposition='outside', 
+                hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
+                customdata=category_counts_dist[['Rainfall_Range']]
+            )
             fig_category_dist_dist.update_layout(
                 xaxis=dict(
                     tickmode='array',
@@ -523,14 +527,15 @@ def show_24_hourly_dashboard(df, selected_date):
                 labels={'Count': '<b>Number of Talukas</b>'},
                 color='Category',
                 color_discrete_map=color_map,
-                hover_data={
-                    'Category': True,
-                    'Rainfall_Range': True,
-                    'Count': True
-                }
+                text='Count' # Add text to the bars
             )
-            # FIX: Ensure hoverdata is correctly displayed
-            fig_category_dist_tal.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
+            # FIX: Reverted change to include Rainfall Range in hovertext
+            fig_category_dist_tal.update_traces(
+                texttemplate='<b>%{text}</b>', 
+                textposition='outside', 
+                hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
+                customdata=category_counts_tal[['Rainfall_Range']]
+            )
             fig_category_dist_tal.update_layout(
                 xaxis=dict(
                     tickmode='array',

@@ -224,6 +224,14 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
         prop_key = geo_feature_id_key.split('.')[-1]
         if prop_key in feature["properties"]:
             feature["properties"][prop_key] = feature["properties"][prop_key].strip().lower()
+    
+    # NEW: Create a custom hover template to control order and formatting
+    hovertemplate_string = (
+        "<b><span style='font-size: 16px'>%{hover_name}</span></b><br>"
+        "<b>Rainfall Total:</b> %{customdata[0]:.1f} mm<br>"
+        "<b>Rainfall Category:</b> %{customdata[1]}<br>"
+        "<b>Rainfall Range:</b> %{customdata[2]}<extra></extra>"
+    )
 
     fig = px.choropleth_mapbox(
         df_plot,
@@ -237,16 +245,13 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
         hover_name=geo_location_col,
-        # UPDATED: Added Rainfall_Category and Rainfall_Range to hover_data
-        hover_data={
-            color_column: ":.1f mm",
-            "District": True if geo_location_col == "Taluka" else False,
-            "Rainfall_Category": True,  # Re-added the category to the hover data
-            "Rainfall_Range": True
-        },
+        custom_data=[df_plot[color_column], df_plot['Rainfall_Category'], df_plot['Rainfall_Range']],
         height=650,
         title=f"<b>{title}</b>"
     )
+    
+    fig.update_traces(hovertemplate=hovertemplate_string)
+
     fig.update_layout(
         margin={"r":0,"t":0,"l":0,"b":0},
         uirevision='true',
@@ -445,14 +450,13 @@ def show_24_hourly_dashboard(df, selected_date):
                 color_discrete_map=color_map,
                 text='Count' # Add text to the bars
             )
-            # FIXED: Corrected hovertemplate to show Rainfall Range on bar chart
-            # CHANGED: textposition to inside to show count between the bars
-            # ADDED: Bigger and bolder text
+            # CHANGED: Updated hovertemplate for correct labels and values.
+            # CHANGED: Updated text font color, size, and boldness for bar chart counts.
             fig_category_dist_dist.update_traces(
                 texttemplate='<b>%{text}</b>', 
                 textposition='inside',
-                textfont=dict(color='white', size=16),
-                hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
+                textfont=dict(color='black', size=18, family="sans-serif", weight="bold"),
+                hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Number of Districts: %{y}<extra></extra>',
                 customdata=category_counts_dist[['Rainfall_Range']]
             )
             fig_category_dist_dist.update_layout(
@@ -536,14 +540,13 @@ def show_24_hourly_dashboard(df, selected_date):
                 color_discrete_map=color_map,
                 text='Count' # Add text to the bars
             )
-            # FIXED: Corrected hovertemplate to show Rainfall Range on bar chart
-            # CHANGED: textposition to inside to show count between the bars
-            # ADDED: Bigger and bolder text
+            # CHANGED: Updated hovertemplate for correct labels and values.
+            # CHANGED: Updated text font color, size, and boldness for bar chart counts.
             fig_category_dist_tal.update_traces(
                 texttemplate='<b>%{text}</b>', 
                 textposition='inside',
-                textfont=dict(color='white', size=16),
-                hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
+                textfont=dict(color='black', size=18, family="sans-serif", weight="bold"),
+                hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Number of Talukas: %{y}<extra></extra>',
                 customdata=category_counts_tal[['Rainfall_Range']]
             )
             fig_category_dist_tal.update_layout(

@@ -554,7 +554,15 @@ def show_24_hourly_dashboard(df, selected_date):
 
 # ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
-st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+
+# Use columns for a flexible header layout
+title_col, dev_col = st.columns([0.7, 0.3])
+
+with title_col:
+    st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+
+with dev_col:
+    st.markdown(f"<div style='text-align: right; padding-top: 1.5rem; font-weight: bold; font-size: 1.0rem;'>Developed by Ankit Patel (Gujarat Weatherman)</div>", unsafe_allow_html=True)
 
 st.markdown("---")
 st.subheader("🗓️ Select Date for Rainfall Data")
@@ -600,7 +608,7 @@ selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
+tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
 
 with tab_daily:
     st.header("Daily Rainfall Summary")

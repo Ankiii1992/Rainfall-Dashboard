@@ -384,7 +384,7 @@ def show_24_hourly_dashboard(df, selected_date):
         columns={'Total_mm': 'District_Avg_Rain_Last_24_Hrs'}
     )
     
-    # NEW: Prepare map data with caching
+    # Prepare map data with caching
     df_plot_dist, color_col_dist = prepare_map_data(district_rainfall_avg_df, geo_location_col="District")
     df_plot_tal, color_col_tal = prepare_map_data(df, geo_location_col="Taluka")
 
@@ -443,6 +443,8 @@ def show_24_hourly_dashboard(df, selected_date):
                     'Count': True
                 }
             )
+            # FIX: Ensure hoverdata is correctly displayed
+            fig_category_dist_dist.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
             fig_category_dist_dist.update_layout(
                 xaxis=dict(
                     tickmode='array',
@@ -456,7 +458,6 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            fig_category_dist_dist.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
             fig_category_dist_dist.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
 
             st.plotly_chart(fig_category_dist_dist, use_container_width=True, key="district_insights_bar_chart")
@@ -528,6 +529,8 @@ def show_24_hourly_dashboard(df, selected_date):
                     'Count': True
                 }
             )
+            # FIX: Ensure hoverdata is correctly displayed
+            fig_category_dist_tal.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
             fig_category_dist_tal.update_layout(
                 xaxis=dict(
                     tickmode='array',
@@ -541,7 +544,6 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            fig_category_dist_tal.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
             fig_category_dist_tal.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
             st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart")
 
@@ -695,7 +697,7 @@ st.markdown("### 🗓️ <b>Select Date for Rainfall Data</b>", unsafe_allow_htm
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.today().date()
 if 'active_tab_state' not in st.session_state:
-    st.session_state.active_tab_state = "Daily Summary"
+    st.session_state.active_tab_state = "Hourly Trends"
 
 col_date_picker, col_prev_btn, col_today_btn, col_next_btn = st.columns([0.2, 0.1, 0.1, 0.1])
 
@@ -735,7 +737,19 @@ selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
+# Change 1: Reordering the tabs to show Hourly Trends first.
+tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
+
+# Change 2: Reordering the data loading and display logic to match the new tab order.
+with tab_hourly:
+    st.markdown("## <b>Hourly Rainfall Trends (2-Hourly)</b>", unsafe_allow_html=True)
+    sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name_2hr = f"2hrs_master_{selected_date_str}"
+    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
+    if not df_2hr.empty:
+        show_hourly_dashboard(df_2hr, selected_date)
+    else:
+        st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
 with tab_daily:
     st.markdown("## <b>Daily Rainfall Summary</b>", unsafe_allow_html=True)
@@ -746,16 +760,6 @@ with tab_daily:
         show_24_hourly_dashboard(df_24hr, selected_date)
     else:
         st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
-
-with tab_hourly:
-    st.markdown("## <b>Hourly Rainfall Trends (2-Hourly)</b>", unsafe_allow_html=True)
-    sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_2hr = f"2hrs_master_{selected_date_str}"
-    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
-    if not df_2hr.empty:
-        show_hourly_dashboard(df_2hr, selected_date)
-    else:
-        st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
 with tab_historical:
     show_historical_dashboard()

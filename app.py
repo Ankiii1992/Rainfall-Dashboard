@@ -32,7 +32,7 @@ def load_geojson(path):
     st.error(f"GeoJSON file not found at: {path}")
     return None
 
-# --- NEW: Enhanced CSS (from reference code) ---
+# --- Enhanced CSS ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -159,11 +159,12 @@ def load_sheet_data(sheet_name, tab_name):
         sheet = client.open(sheet_name).worksheet(tab_name)
         df = pd.DataFrame(sheet.get_all_records())
         df.columns = df.columns.str.strip()
-        # CHANGED: Reverting the column name back to Dist_Avg_Rain_Last_24_Hrs
+        
+        # CORRECTED: Reverting the column name back to Dist_Avg_Rain_Last_24_Hrs as requested.
         if 'TOTAL' in df.columns:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
-        elif "District_Avg_Rain_Last_24_Hrs" in df.columns:
-             df.rename(columns={"DISTRICT": "District", "District_Avg_Rain_Last_24_Hrs": "Dist_Avg_Rain_Last_24_Hrs"}, inplace=True)
+        elif "Dist_Avg_Rain_Last_24_Hrs" in df.columns:
+             df.rename(columns={"DISTRICT": "District", "Dist_Avg_Rain_Last_24_Hrs": "Dist_Avg_Rain_Last_24_Hrs"}, inplace=True)
         else:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
@@ -228,8 +229,8 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
         if prop_key in feature["properties"]:
             feature["properties"][prop_key] = feature["properties"][prop_key].strip().lower()
     
-    # CHANGED: Use a specific column for the hover_name to show District or Taluka name correctly.
-    # The 'hover_name' parameter handles this automatically when set to the correct column name.
+    # CORRECTED: The hovertemplate now uses %{hover_name} to correctly display the District or Taluka name,
+    # as specified by the 'hover_name' parameter. This fixes the issue where the name was not showing.
     hovertemplate_string = (
         "<b><span style='font-size: 16px'>%{hover_name}</span></b><br>"
         "<b>Rainfall Total:</b> %{customdata[0]:.1f} mm<br>"
@@ -248,7 +249,7 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
         zoom=6,
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
-        hover_name=geo_location_col.title(), # CHANGED: Set hover_name to the column name for correct display
+        hover_name=df_plot[geo_location_col.title()], # CORRECTED: Use the column name directly to set the hover name.
         custom_data=[df_plot[color_column], df_plot['Rainfall_Category'], df_plot['Rainfall_Range']],
         height=650,
         title=f"<b>{title}</b>"
@@ -291,7 +292,7 @@ def show_24_hourly_dashboard(df, selected_date):
     if "Rain_Last_24_Hrs" in df.columns:
         df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
     
-    # CHANGED: Using Dist_Avg_Rain_Last_24_Hrs instead of District_Avg_Rain_Last_24_Hrs
+    # CORRECTED: Using Dist_Avg_Rain_Last_24_Hrs as the column name.
     required_cols = ["Total_mm", "Taluka", "District"]
     for col in required_cols:
         if col not in df.columns:
@@ -394,7 +395,7 @@ def show_24_hourly_dashboard(df, selected_date):
 
     st.markdown("### 🗺️ <b>Rainfall Distribution Overview</b>", unsafe_allow_html=True)
 
-    # CHANGED: Using Dist_Avg_Rain_Last_24_Hrs instead of District_Avg_Rain_Last_24_Hrs
+    # CORRECTED: Using Dist_Avg_Rain_Last_24_Hrs instead of District_Avg_Rain_Last_24_Hrs
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
         columns={'Total_mm': 'Dist_Avg_Rain_Last_24_Hrs'}
@@ -443,7 +444,6 @@ def show_24_hourly_dashboard(df, selected_date):
                 ordered=True
             )
             category_counts_dist = category_counts_dist.sort_values('Category')
-            # CHANGED: Ensure the correct rainfall range is used for hover data
             category_counts_dist['Rainfall_Range'] = category_counts_dist['Category'].map(category_ranges)
 
             fig_category_dist_dist = px.bar(
@@ -456,7 +456,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 color_discrete_map=color_map,
                 text='Count'
             )
-            # CHANGED: Corrected hovertemplate and customdata to show the correct rainfall range
+            # CORRECTED: The hovertemplate now correctly uses customdata to display the Rainfall Range.
             fig_category_dist_dist.update_traces(
                 texttemplate='<b>%{text}</b>', 
                 textposition='inside',
@@ -532,7 +532,6 @@ def show_24_hourly_dashboard(df, selected_date):
                 ordered=True
             )
             category_counts_tal = category_counts_tal.sort_values('Category')
-            # CHANGED: Ensure the correct rainfall range is used for hover data
             category_counts_tal['Rainfall_Range'] = category_counts_tal['Category'].map(category_ranges)
 
             fig_category_dist_tal = px.bar(
@@ -545,7 +544,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 color_discrete_map=color_map,
                 text='Count'
             )
-            # CHANGED: Corrected hovertemplate and customdata to show the correct rainfall range
+            # CORRECTED: The hovertemplate now correctly uses customdata to display the Rainfall Range.
             fig_category_dist_tal.update_traces(
                 texttemplate='<b>%{text}</b>', 
                 textposition='inside',
@@ -599,7 +598,7 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         st.info("No rainfall data available to determine top 10 talukas.")
 
-    # CHANGED: Removed "Full" from title
+    # CHANGED: Title and removed download button.
     st.markdown("### 📋 <b>Daily Rainfall Data Table</b>", unsafe_allow_html=True)
     df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
     df_display.index += 1
@@ -763,10 +762,8 @@ selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-# Change 1: Reordering the tabs to show Hourly Trends first.
 tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
 
-# Change 2: Reordering the data loading and display logic to match the new tab order.
 with tab_hourly:
     st.markdown("## <b>Hourly Rainfall Trends (2-Hourly)</b>", unsafe_allow_html=True)
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"

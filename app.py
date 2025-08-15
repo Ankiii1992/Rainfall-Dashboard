@@ -206,13 +206,17 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
     hover_data = [f"{v:.1f} mm" if not pd.isna(v) else "N/A" for v in df_plot[color_column].tolist()]
     
     # Custom color scale to match the discrete categories
-    color_scale_list = [color_map[cat] for cat in ordered_categories]
+    num_categories = len(ordered_categories)
+    color_scale_discrete = [
+        [i / (num_categories - 1), color_map[cat]]
+        for i, cat in enumerate(ordered_categories)
+    ]
 
     fig = go.Figure(go.Choroplethmapbox(
         geojson=geojson_data,
         locations=locations,
         z=color_values,
-        colorscale=color_scale_list,
+        colorscale=color_scale_discrete,
         featureidkey=geo_feature_id_key,
         customdata=df_plot[[geo_location_col, color_column]].values,
         hovertemplate='<b>%{customdata[0]}</b><br>Rainfall: %{customdata[1]:.1f} mm<extra></extra>',

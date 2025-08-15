@@ -702,7 +702,7 @@ with tab_hourly:
                     name=taluka,
                     mode='lines',
                     # --- START OF CHANGE ---
-                    line=dict(width=4, color='black'),
+                    line=dict(width=4, color='#1A237E'),
                     # --- END OF CHANGE ---
                     hovertemplate="""
                         <b>%{fullData.name}</b><br>

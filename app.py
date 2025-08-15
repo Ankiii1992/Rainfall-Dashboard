@@ -701,7 +701,9 @@ with tab_hourly:
                     y=taluka_df['Rainfall (mm)'],
                     name=taluka,
                     mode='lines',
-                    line=dict(width=4, color=taluka_df['color'].iloc[-1]),
+                    # --- START OF CHANGE ---
+                    line=dict(width=4, color='black'),
+                    # --- END OF CHANGE ---
                     hovertemplate="""
                         <b>%{fullData.name}</b><br>
                         Time Slot: %{x}<br>
@@ -714,9 +716,7 @@ with tab_hourly:
                     y=taluka_df['Rainfall (mm)'],
                     name=taluka,
                     mode='markers+text',
-                    # --- START OF CHANGE ---
                     text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{int(x)}'),
-                    # --- END OF CHANGE ---
                     textposition='middle center',
                     marker=dict(
                         size=30,

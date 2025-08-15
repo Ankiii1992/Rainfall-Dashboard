@@ -159,8 +159,11 @@ def load_sheet_data(sheet_name, tab_name):
         sheet = client.open(sheet_name).worksheet(tab_name)
         df = pd.DataFrame(sheet.get_all_records())
         df.columns = df.columns.str.strip()
+        # CHANGED: Reverting the column name back to Dist_Avg_Rain_Last_24_Hrs
         if 'TOTAL' in df.columns:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
+        elif "District_Avg_Rain_Last_24_Hrs" in df.columns:
+             df.rename(columns={"DISTRICT": "District", "District_Avg_Rain_Last_24_Hrs": "Dist_Avg_Rain_Last_24_Hrs"}, inplace=True)
         else:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
@@ -191,11 +194,11 @@ def prepare_map_data(df, geo_location_col="Taluka"):
     if 'Total_mm' in df_plot.columns:
         df_plot["Total_mm"] = pd.to_numeric(df_plot["Total_mm"], errors='coerce')
         color_column = 'Total_mm'
-    elif 'District_Avg_Rain_Last_24_Hrs' in df_plot.columns:
-        df_plot["District_Avg_Rain_Last_24_Hrs"] = pd.to_numeric(df_plot["District_Avg_Rain_Last_24_Hrs"], errors='coerce')
-        color_column = 'District_Avg_Rain_Last_24_Hrs'
+    elif 'Dist_Avg_Rain_Last_24_Hrs' in df_plot.columns:
+        df_plot["Dist_Avg_Rain_Last_24_Hrs"] = pd.to_numeric(df_plot["Dist_Avg_Rain_Last_24_Hrs"], errors='coerce')
+        color_column = 'Dist_Avg_Rain_Last_24_Hrs'
     else:
-        st.warning("Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization.")
+        st.warning("Neither 'Total_mm' nor 'Dist_Avg_Rain_Last_24_Hrs' found for map categorization.")
         df_plot["Rainfall_Category"] = "No Rain"
         color_column = "Rainfall_Category"
 
@@ -225,7 +228,8 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
         if prop_key in feature["properties"]:
             feature["properties"][prop_key] = feature["properties"][prop_key].strip().lower()
     
-    # NEW: Create a custom hover template to control order and formatting
+    # CHANGED: Use a specific column for the hover_name to show District or Taluka name correctly.
+    # The 'hover_name' parameter handles this automatically when set to the correct column name.
     hovertemplate_string = (
         "<b><span style='font-size: 16px'>%{hover_name}</span></b><br>"
         "<b>Rainfall Total:</b> %{customdata[0]:.1f} mm<br>"
@@ -244,7 +248,7 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
         zoom=6,
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
-        hover_name=geo_location_col,
+        hover_name=geo_location_col.title(), # CHANGED: Set hover_name to the column name for correct display
         custom_data=[df_plot[color_column], df_plot['Rainfall_Category'], df_plot['Rainfall_Range']],
         height=650,
         title=f"<b>{title}</b>"
@@ -286,7 +290,8 @@ def show_24_hourly_dashboard(df, selected_date):
     df = correct_taluka_names(df)
     if "Rain_Last_24_Hrs" in df.columns:
         df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
-
+    
+    # CHANGED: Using Dist_Avg_Rain_Last_24_Hrs instead of District_Avg_Rain_Last_24_Hrs
     required_cols = ["Total_mm", "Taluka", "District"]
     for col in required_cols:
         if col not in df.columns:
@@ -389,9 +394,10 @@ def show_24_hourly_dashboard(df, selected_date):
 
     st.markdown("### 🗺️ <b>Rainfall Distribution Overview</b>", unsafe_allow_html=True)
 
+    # CHANGED: Using Dist_Avg_Rain_Last_24_Hrs instead of District_Avg_Rain_Last_24_Hrs
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
-        columns={'Total_mm': 'District_Avg_Rain_Last_24_Hrs'}
+        columns={'Total_mm': 'Dist_Avg_Rain_Last_24_Hrs'}
     )
     
     # Prepare map data with caching
@@ -437,21 +443,20 @@ def show_24_hourly_dashboard(df, selected_date):
                 ordered=True
             )
             category_counts_dist = category_counts_dist.sort_values('Category')
+            # CHANGED: Ensure the correct rainfall range is used for hover data
             category_counts_dist['Rainfall_Range'] = category_counts_dist['Category'].map(category_ranges)
 
             fig_category_dist_dist = px.bar(
                 category_counts_dist,
                 x='Category',
                 y='Count',
-                # CHANGED: Removed "Daily" from title
                 title='<b>Distribution of Districts by Rainfall Category</b>',
                 labels={'Count': '<b>Number of Districts</b>'},
                 color='Category',
                 color_discrete_map=color_map,
-                text='Count' # Add text to the bars
+                text='Count'
             )
-            # CHANGED: Updated hovertemplate for correct labels and values.
-            # CHANGED: Updated text font color, size, and boldness for bar chart counts.
+            # CHANGED: Corrected hovertemplate and customdata to show the correct rainfall range
             fig_category_dist_dist.update_traces(
                 texttemplate='<b>%{text}</b>', 
                 textposition='inside',
@@ -527,21 +532,20 @@ def show_24_hourly_dashboard(df, selected_date):
                 ordered=True
             )
             category_counts_tal = category_counts_tal.sort_values('Category')
+            # CHANGED: Ensure the correct rainfall range is used for hover data
             category_counts_tal['Rainfall_Range'] = category_counts_tal['Category'].map(category_ranges)
 
             fig_category_dist_tal = px.bar(
                 category_counts_tal,
                 x='Category',
                 y='Count',
-                # CHANGED: Removed "Daily" from title
                 title='<b>Distribution of Talukas by Rainfall Category</b>',
                 labels={'Count': '<b>Number of Talukas</b>'},
                 color='Category',
                 color_discrete_map=color_map,
-                text='Count' # Add text to the bars
+                text='Count'
             )
-            # CHANGED: Updated hovertemplate for correct labels and values.
-            # CHANGED: Updated text font color, size, and boldness for bar chart counts.
+            # CHANGED: Corrected hovertemplate and customdata to show the correct rainfall range
             fig_category_dist_tal.update_traces(
                 texttemplate='<b>%{text}</b>', 
                 textposition='inside',

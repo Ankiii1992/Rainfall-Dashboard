@@ -799,8 +799,8 @@ with tab_daily:
     # Load data only if it's not already in session state
     if st.session_state.daily_data.empty:
         with st.spinner(f"Fetching daily data for {selected_date_str}... This may take a moment."):
-            daily_sheet_name = "Daily_Rainfall_24_Hrs"
-            daily_tab_name = selected_date_str
+            daily_sheet_name = f"24HR_Rainfall_{selected_month}_{selected_year}"
+            daily_tab_name = f"master24hrs_{selected_date_str}"
             st.session_state.daily_data = load_sheet_data(daily_sheet_name, daily_tab_name)
     
     if not st.session_state.daily_data.empty:

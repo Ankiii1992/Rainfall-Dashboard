@@ -572,6 +572,8 @@ if 'daily_data' not in st.session_state:
     st.session_state.daily_data = pd.DataFrame()
 if 'hourly_data' not in st.session_state:
     st.session_state.hourly_data = pd.DataFrame()
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = False
 
 col_date_picker, col_prev_btn, col_today_btn, col_next_btn = st.columns([0.2, 0.1, 0.1, 0.1])
 with col_date_picker:
@@ -584,6 +586,7 @@ with col_date_picker:
         st.session_state.selected_date = selected_date_from_picker
         st.session_state.daily_data = pd.DataFrame() # Clear data for new date
         st.session_state.hourly_data = pd.DataFrame() # Clear data for new date
+        st.session_state.data_loaded = False # Reset loading state
         st.cache_data.clear() # Clear cache for new date
         st.rerun()
 
@@ -594,6 +597,7 @@ with col_prev_btn:
         st.session_state.selected_date = selected_date - timedelta(days=1)
         st.session_state.daily_data = pd.DataFrame()
         st.session_state.hourly_data = pd.DataFrame()
+        st.session_state.data_loaded = False
         st.cache_data.clear()
         st.rerun()
 
@@ -603,6 +607,7 @@ with col_today_btn:
         st.session_state.selected_date = datetime.today().date()
         st.session_state.daily_data = pd.DataFrame()
         st.session_state.hourly_data = pd.DataFrame()
+        st.session_state.data_loaded = False
         st.cache_data.clear()
         st.rerun()
 
@@ -612,13 +617,9 @@ with col_next_btn:
         st.session_state.selected_date = selected_date + timedelta(days=1)
         st.session_state.daily_data = pd.DataFrame()
         st.session_state.hourly_data = pd.DataFrame()
+        st.session_state.data_loaded = False
         st.cache_data.clear()
         st.rerun()
-
-# Load data based on selected date
-selected_year = selected_date.strftime("%Y")
-selected_month = selected_date.strftime("%B")
-selected_date_str = selected_date.strftime("%Y-%m-%d")
 
 # This is the crucial part that fixes the 504 error
 if st.button("📊 Load Rainfall Data for Selected Date"):
@@ -632,16 +633,19 @@ if st.button("📊 Load Rainfall Data for Selected Date"):
         hourly_sheet_name = f"2HR_Rainfall_{selected_month}_{selected_year}"
         hourly_tab_name = f"2hrs_master_{selected_date_str}"
         st.session_state.hourly_data = load_sheet_data(hourly_sheet_name, hourly_tab_name)
+    st.session_state.data_loaded = True
     st.success("Data loaded successfully!")
-    st.rerun()
 
 # Display content only if data is loaded
-if not st.session_state.daily_data.empty:
-    tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
-    
+if st.session_state.data_loaded and (not st.session_state.daily_data.empty or not st.session_state.hourly_data.empty):
+    tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data"])
+
     with tab_daily:
         st.header("Daily Rainfall Summary")
-        show_24_hourly_dashboard(st.session_state.daily_data, selected_date)
+        if not st.session_state.daily_data.empty:
+            show_24_hourly_dashboard(st.session_state.daily_data, selected_date)
+        else:
+            st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
     
     with tab_hourly:
         st.header("Hourly Rainfall Trends (2-Hourly)")
@@ -797,5 +801,9 @@ if not st.session_state.daily_data.empty:
         else:
             st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
+    with tab_historical:
+        st.header("Historical Rainfall Data")
+        st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
+        
 else:
     st.info("Please select a date and click '📊 Load Rainfall Data for Selected Date' to view the dashboard.")

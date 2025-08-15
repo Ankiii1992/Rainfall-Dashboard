@@ -572,9 +572,26 @@ if 'daily_data' not in st.session_state:
     st.session_state.daily_data = pd.DataFrame()
 if 'hourly_data' not in st.session_state:
     st.session_state.hourly_data = pd.DataFrame()
-if 'data_loaded' not in st.session_state:
-    st.session_state.data_loaded = False
 
+# Automatically load today's data on initial app load
+if 'first_load' not in st.session_state:
+    with st.spinner(f"Loading today's data... this may take a moment."):
+        today = datetime.today().date()
+        daily_sheet_name = "Daily_Rainfall_24_Hrs"
+        daily_tab_name = today.strftime("%Y-%m-%d")
+        
+        # Check if the tab for today's data exists before trying to load it
+        try:
+            client = get_gsheet_client()
+            if client:
+                client.open(daily_sheet_name).worksheet(daily_tab_name)
+                st.session_state.daily_data = load_sheet_data(daily_sheet_name, daily_tab_name)
+        except gspread.WorksheetNotFound:
+            st.warning(f"⚠️ Daily data is not available for today ({today.strftime('%Y-%m-%d')}). Please select a different date.")
+
+    st.session_state.first_load = True
+    
+# Date selection widgets
 col_date_picker, col_prev_btn, col_today_btn, col_next_btn = st.columns([0.2, 0.1, 0.1, 0.1])
 with col_date_picker:
     selected_date_from_picker = st.date_input(
@@ -584,10 +601,9 @@ with col_date_picker:
     )
     if selected_date_from_picker != st.session_state.selected_date:
         st.session_state.selected_date = selected_date_from_picker
-        st.session_state.daily_data = pd.DataFrame() # Clear data for new date
-        st.session_state.hourly_data = pd.DataFrame() # Clear data for new date
-        st.session_state.data_loaded = False # Reset loading state
-        st.cache_data.clear() # Clear cache for new date
+        st.session_state.daily_data = pd.DataFrame()
+        st.session_state.hourly_data = pd.DataFrame()
+        st.cache_data.clear()
         st.rerun()
 
 selected_date = st.session_state.selected_date
@@ -597,7 +613,6 @@ with col_prev_btn:
         st.session_state.selected_date = selected_date - timedelta(days=1)
         st.session_state.daily_data = pd.DataFrame()
         st.session_state.hourly_data = pd.DataFrame()
-        st.session_state.data_loaded = False
         st.cache_data.clear()
         st.rerun()
 
@@ -607,7 +622,6 @@ with col_today_btn:
         st.session_state.selected_date = datetime.today().date()
         st.session_state.daily_data = pd.DataFrame()
         st.session_state.hourly_data = pd.DataFrame()
-        st.session_state.data_loaded = False
         st.cache_data.clear()
         st.rerun()
 
@@ -617,27 +631,29 @@ with col_next_btn:
         st.session_state.selected_date = selected_date + timedelta(days=1)
         st.session_state.daily_data = pd.DataFrame()
         st.session_state.hourly_data = pd.DataFrame()
-        st.session_state.data_loaded = False
         st.cache_data.clear()
         st.rerun()
 
-# This is the crucial part that fixes the 504 error
-if st.button("📊 Load Rainfall Data for Selected Date"):
-    with st.spinner(f"Fetching data for {selected_date_str}... This may take a moment."):
-        # Daily Data
-        daily_sheet_name = "Daily_Rainfall_24_Hrs"
-        daily_tab_name = selected_date_str
-        st.session_state.daily_data = load_sheet_data(daily_sheet_name, daily_tab_name)
-        
-        # Hourly Data
-        hourly_sheet_name = f"2HR_Rainfall_{selected_month}_{selected_year}"
-        hourly_tab_name = f"2hrs_master_{selected_date_str}"
-        st.session_state.hourly_data = load_sheet_data(hourly_sheet_name, hourly_tab_name)
-    st.session_state.data_loaded = True
-    st.success("Data loaded successfully!")
+# Load data based on selected date and display dashboard
+selected_year = st.session_state.selected_date.strftime("%Y")
+selected_month = st.session_state.selected_date.strftime("%B")
+selected_date_str = st.session_state.selected_date.strftime("%Y-%m-%d")
+
+# Only show the load button if the selected date is not today's date
+if st.session_state.selected_date != datetime.today().date():
+    if st.button(f"📊 Load Rainfall Data for {selected_date_str}"):
+        with st.spinner(f"Fetching data... This may take a moment."):
+            daily_sheet_name = "Daily_Rainfall_24_Hrs"
+            daily_tab_name = selected_date_str
+            st.session_state.daily_data = load_sheet_data(daily_sheet_name, daily_tab_name)
+            
+            hourly_sheet_name = f"2HR_Rainfall_{selected_month}_{selected_year}"
+            hourly_tab_name = f"2hrs_master_{selected_date_str}"
+            st.session_state.hourly_data = load_sheet_data(hourly_sheet_name, hourly_tab_name)
+        st.success("Data loaded successfully!")
 
 # Display content only if data is loaded
-if st.session_state.data_loaded and (not st.session_state.daily_data.empty or not st.session_state.hourly_data.empty):
+if not st.session_state.daily_data.empty or not st.session_state.hourly_data.empty:
     tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data"])
 
     with tab_daily:
@@ -806,4 +822,4 @@ if st.session_state.data_loaded and (not st.session_state.daily_data.empty or no
         st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
         
 else:
-    st.info("Please select a date and click '📊 Load Rainfall Data for Selected Date' to view the dashboard.")
+    st.info("Please click the 'Load Rainfall Data' button to view the dashboard.")

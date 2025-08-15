@@ -26,7 +26,7 @@ def load_geojson(path):
     st.error(f"GeoJSON file not found at: {path}")
     return None
 
-# --- Enhanced CSS ---
+# --- NEW: Enhanced CSS (from reference code) ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -141,7 +141,6 @@ def generate_title_from_date(selected_date):
     end_date = selected_date.strftime("%d-%m-%Y")
     return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
 
-@st.cache_data(ttl=3600)  # Cache data for 1 hour
 def load_sheet_data(sheet_name, tab_name):
     try:
         client = get_gsheet_client()
@@ -154,7 +153,6 @@ def load_sheet_data(sheet_name, tab_name):
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
     except Exception as e:
-        st.error(f"Error loading data from Google Sheet: {e}")
         return pd.DataFrame()
 
 def correct_taluka_names(df):
@@ -165,14 +163,13 @@ def correct_taluka_names(df):
     df['Taluka'] = df['Taluka'].replace(taluka_name_mapping)
     return df
 
-# --- MODIFIED: Optimized plot_choropleth function with px.choropleth_mapbox ---
-def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_col):
+def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
         return go.Figure()
 
     df_plot = df.copy()
-    
+
     if geo_location_col == "Taluka":
         df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
     elif geo_location_col == "District":
@@ -196,28 +193,33 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             categories=ordered_categories,
             ordered=True
         )
-    
-    # Use px.choropleth_mapbox for correct discrete color mapping
+
+    for feature in geojson_data["features"]:
+        if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
+            feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
+        elif geo_feature_id_key == "properties.district" and "district" in feature["properties"]:
+            feature["properties"]["district"] = feature["properties"]["district"].strip().lower()
+
     fig = px.choropleth_mapbox(
         df_plot,
         geojson=geojson_data,
-        locations=geo_location_col,
         featureidkey=geo_feature_id_key,
-        color="Rainfall_Category", # The column with the categorical data
-        color_discrete_map=color_map, # The discrete color map
-        hover_name=geo_location_col,
-        hover_data={
-            "Rainfall_Category": True,
-            color_column: ":.1f" # Format the rainfall value
-        },
+        locations=geo_location_col,
+        color="Rainfall_Category",
+        color_discrete_map=color_map,
         mapbox_style="open-street-map",
         zoom=6,
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
-        title=title,
-        height=650
+        hover_name=geo_location_col,
+        hover_data={
+            color_column: ":.1f mm",
+            "District": True if geo_location_col == "Taluka" else False,
+            "Rainfall_Category":False
+        },
+        height=650,
+        title=title
     )
-
     fig.update_layout(
         margin={"r":0,"t":0,"l":0,"b":0},
         uirevision='true',
@@ -233,7 +235,6 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             itemsizing='constant',
         )
     )
-
     return fig
 
 
@@ -371,6 +372,14 @@ def show_24_hourly_dashboard(df, selected_date):
         ordered=True
     )
     df_map_talukas["Rainfall_Range"] = df_map_talukas["Rainfall_Category"].map(category_ranges)
+
+    taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
+    district_geojson = load_geojson("gujarat_district_clean.geojson")
+
+
+    if not taluka_geojson or not district_geojson:
+        st.error("Cannot display maps: One or both GeoJSON files not found or loaded correctly.")
+        return
 
     tab_districts, tab_talukas = st.tabs(["Rainfall Distribution by Districts", "Rainfall Distribution by Talukas"])
 
@@ -599,6 +608,8 @@ selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
+# The order of the with blocks is what determines which tab loads first.
+# This has been corrected to place "Hourly Trends" first.
 tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
 
 with tab_hourly:

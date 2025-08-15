@@ -26,7 +26,7 @@ def load_geojson(path):
     st.error(f"GeoJSON file not found at: {path}")
     return None
 
-# --- Enhanced CSS ---
+# --- NEW: Enhanced CSS (from reference code) ---
 st.markdown("""
 <style>
     html, body, .main {
@@ -163,14 +163,13 @@ def correct_taluka_names(df):
     df['Taluka'] = df['Taluka'].replace(taluka_name_mapping)
     return df
 
-# --- MODIFIED: plot_choropleth function using multiple go.Choroplethmapbox traces ---
-def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_col):
+def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
         return go.Figure()
 
     df_plot = df.copy()
-    
+
     if geo_location_col == "Taluka":
         df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
     elif geo_location_col == "District":
@@ -195,41 +194,36 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             ordered=True
         )
 
-    fig = go.Figure()
+    for feature in geojson_data["features"]:
+        if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
+            feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
+        elif geo_feature_id_key == "properties.district" and "district" in feature["properties"]:
+            feature["properties"]["district"] = feature["properties"]["district"].strip().lower()
 
-    # Create a separate trace for each category
-    for cat in ordered_categories:
-        df_category = df_plot[df_plot['Rainfall_Category'] == cat]
-        if not df_category.empty:
-            fig.add_trace(
-                go.Choroplethmapbox(
-                    geojson=geojson_data,
-                    locations=df_category[geo_location_col].tolist(),
-                    featureidkey=geo_feature_id_key,
-                    marker_line_width=1,
-                    marker_line_color='black',
-                    marker_opacity=0.75,
-                    z=df_category["Rainfall_Category"].cat.codes,
-                    colorscale=[[0, color_map[cat]], [1, color_map[cat]]], # This forces a solid color
-                    # name=f"{cat} ({category_ranges[cat]})", # This is not needed because of the legend below
-                    hovertemplate='<b>%{location}</b><br>'
-                                  +f'{cat}<br>'
-                                  +f'Rainfall: %{{customdata[1]:.1f}} mm<extra></extra>',
-                    customdata=df_category[[geo_location_col, color_column]].values,
-                    showscale=False,
-                )
-            )
-
-    fig.update_layout(
+    fig = px.choropleth_mapbox(
+        df_plot,
+        geojson=geojson_data,
+        featureidkey=geo_feature_id_key,
+        locations=geo_location_col,
+        color="Rainfall_Category",
+        color_discrete_map=color_map,
         mapbox_style="open-street-map",
-        mapbox_zoom=6,
-        mapbox_center={"lat": 22.5, "lon": 71.5},
+        zoom=6,
+        center={"lat": 22.5, "lon": 71.5},
+        opacity=0.75,
+        hover_name=geo_location_col,
+        hover_data={
+            color_column: ":.1f mm",
+            "District": True if geo_location_col == "Taluka" else False,
+            "Rainfall_Category":False
+        },
         height=650,
+        title=title
+    )
+    fig.update_layout(
         margin={"r":0,"t":0,"l":0,"b":0},
         uirevision='true',
         showlegend=True,
-        title=title,
-        # Create a legend with the discrete categories
         legend=dict(
             orientation="h",
             yanchor="top",
@@ -241,19 +235,6 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             itemsizing='constant',
         )
     )
-
-    # Add dummy traces for the legend to show discrete categories
-    for i, cat in enumerate(ordered_categories):
-        fig.add_trace(go.Scattermapbox(
-            lat=[None], lon=[None],
-            mode='markers',
-            marker=go.scattermapbox.Marker(
-                size=0,
-                color=color_map[cat],
-            ),
-            name=f"{cat} ({category_ranges[cat]})"
-        ))
-
     return fig
 
 
@@ -392,6 +373,14 @@ def show_24_hourly_dashboard(df, selected_date):
     )
     df_map_talukas["Rainfall_Range"] = df_map_talukas["Rainfall_Category"].map(category_ranges)
 
+    taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
+    district_geojson = load_geojson("gujarat_district_clean.geojson")
+
+
+    if not taluka_geojson or not district_geojson:
+        st.error("Cannot display maps: One or both GeoJSON files not found or loaded correctly.")
+        return
+
     tab_districts, tab_talukas = st.tabs(["Rainfall Distribution by Districts", "Rainfall Distribution by Talukas"])
 
 
@@ -458,7 +447,6 @@ def show_24_hourly_dashboard(df, selected_date):
         with map_col_tal:
             st.markdown("#### Gujarat Rainfall Map (by Taluka)")
             with st.spinner("Loading taluka map..."):
-                # GeoJSON is not loaded here, but passed to the function
                 fig_map_talukas = plot_choropleth(
                     df_map_talukas,
                     "gujarat_taluka_clean.geojson",
@@ -620,9 +608,20 @@ selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-# The order of the with blocks is what determines which tab loads first.
-# This has been corrected to place "Hourly Trends" first.
 tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
+
+with tab_daily:
+    st.header("Daily Rainfall Summary")
+
+    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name_24hr = f"master24hrs_{selected_date_str}"
+
+    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
+
+    if not df_24hr.empty:
+        show_24_hourly_dashboard(df_24hr, selected_date)
+    else:
+        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
@@ -726,19 +725,6 @@ with tab_hourly:
 
     else:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
-
-with tab_daily:
-    st.header("Daily Rainfall Summary")
-
-    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_24hr = f"master24hrs_{selected_date_str}"
-
-    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
-
-    if not df_24hr.empty:
-        show_24_hourly_dashboard(df_24hr, selected_date)
-    else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_historical:
     st.header("Historical Rainfall Data")

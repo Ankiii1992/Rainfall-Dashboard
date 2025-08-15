@@ -163,7 +163,7 @@ def correct_taluka_names(df):
     df['Taluka'] = df['Taluka'].replace(taluka_name_mapping)
     return df
 
-# --- MODIFIED: Optimized plot_choropleth function for better performance ---
+# --- MODIFIED: Optimized plot_choropleth function with px.choropleth_mapbox ---
 def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_col):
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
@@ -195,45 +195,31 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             ordered=True
         )
 
-    # Convert the category to an ordered integer for plotting
-    df_plot["Color_Value"] = df_plot["Rainfall_Category"].cat.codes
-
-    # Use plotly.graph_objects for better performance with large GeoJSONs
-    # Extract locations and values from the dataframe
-    locations = df_plot[geo_location_col].tolist()
-    color_values = df_plot["Color_Value"].tolist()
-    hover_names = df_plot[geo_location_col].tolist()
-    hover_data = [f"{v:.1f} mm" if not pd.isna(v) else "N/A" for v in df_plot[color_column].tolist()]
-    
-    # Custom color scale to match the discrete categories
-    num_categories = len(ordered_categories)
-    color_scale_discrete = [
-        [i / (num_categories - 1), color_map[cat]]
-        for i, cat in enumerate(ordered_categories)
-    ]
-
-    fig = go.Figure(go.Choroplethmapbox(
+    # Use px.choropleth_mapbox for correct discrete color mapping
+    fig = px.choropleth_mapbox(
+        df_plot,
         geojson=geojson_data,
-        locations=locations,
-        z=color_values,
-        colorscale=color_scale_discrete,
+        locations=geo_location_col,
         featureidkey=geo_feature_id_key,
-        customdata=df_plot[[geo_location_col, color_column]].values,
-        hovertemplate='<b>%{customdata[0]}</b><br>Rainfall: %{customdata[1]:.1f} mm<extra></extra>',
-        marker_opacity=0.75,
-        marker_line_width=1
-    ))
-    
-    fig.update_layout(
+        color="Rainfall_Category", # The column with the categorical data
+        color_discrete_map=color_map, # The discrete color map
+        hover_name=geo_location_col,
+        hover_data={
+            "Rainfall_Category": True,
+            color_column: ":.1f" # Format the rainfall value
+        },
         mapbox_style="open-street-map",
-        mapbox_zoom=6,
-        mapbox_center={"lat": 22.5, "lon": 71.5},
-        height=650,
+        zoom=6,
+        center={"lat": 22.5, "lon": 71.5},
+        opacity=0.75,
+        title=title,
+        height=650
+    )
+
+    fig.update_layout(
         margin={"r":0,"t":0,"l":0,"b":0},
         uirevision='true',
         showlegend=True,
-        title=title,
-        # Create a legend with the discrete categories
         legend=dict(
             orientation="h",
             yanchor="top",
@@ -245,18 +231,6 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             itemsizing='constant',
         )
     )
-
-    # Add dummy traces for the legend to show discrete categories
-    for i, cat in enumerate(ordered_categories):
-        fig.add_trace(go.Scattermapbox(
-            lat=[None], lon=[None],
-            mode='markers',
-            marker=go.scattermapbox.Marker(
-                size=0,
-                color=color_map[cat],
-            ),
-            name=f"{cat} ({category_ranges[cat]})"
-        ))
 
     return fig
 

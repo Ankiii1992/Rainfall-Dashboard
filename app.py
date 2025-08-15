@@ -646,9 +646,11 @@ with tab_hourly:
         }
         df_long['Time Slot Label'] = pd.Categorical(
             df_long['Time Slot'].map(slot_labels),
-            categories=[slot_labels[slot] for slot in existing_order],
+            categories=[slot_labels[s] for s in existing_order],
             ordered=True
         )
+        df_long['Rainfall_Category'] = df_long['Rainfall (mm)'].apply(classify_rainfall)
+        
         df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
 
         df_2hr['Total_mm'] = pd.to_numeric(df_2hr['Total_mm'], errors='coerce')
@@ -677,49 +679,68 @@ with tab_hourly:
                 st.markdown("</div>", unsafe_allow_html=True)
         
         st.markdown("### 📈 Rainfall Trend by 2-hourly Time Interval")
-
-        view_mode = st.radio("Select Chart View", ["Line Chart", "Heatmap"], key="hourly_chart_view")
-
-        if view_mode == "Line Chart":
-            selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
         
-            if selected_talukas:
-                plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
-                fig = px.line(
-                    plot_df,
-                    x="Time Slot Label",
-                    y="Rainfall (mm)",
-                    color="Taluka",
-                    markers=True,
-                    text="Rainfall (mm)",
-                    title="Rainfall Trend Over Time for Selected Talukas",
-                    labels={"Rainfall (mm)": "Rainfall (mm)"}
-                )
-                fig.update_traces(textposition="top center")
-                fig.update_layout(showlegend=True)
-                fig.update_layout(modebar_remove=['toImage'])
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Please select at least one Taluka to view the rainfall trend.")
-
-        elif view_mode == "Heatmap":
-            heatmap_df = df_long.pivot_table(index='Taluka', columns='Time Slot Label', values='Rainfall (mm)', aggfunc='sum')
-            heatmap_df = heatmap_df.reindex(columns=[slot_labels[s] for s in existing_order], fill_value=0)
+        selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
+    
+        if selected_talukas:
+            plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
+            fig = px.line(
+                plot_df,
+                x="Time Slot Label",
+                y="Rainfall (mm)",
+                color="Taluka",
+                markers=True,
+                text="Rainfall (mm)",
+                title="Rainfall Trend Over Time for Selected Talukas",
+                labels={"Rainfall (mm)": "Rainfall (mm)"},
+                hover_data={
+                    "Taluka": False,
+                    "Rainfall (mm)": ":.1f",
+                    "Rainfall_Category": True
+                }
+            )
             
-            fig = px.imshow(
-                heatmap_df,
-                x=heatmap_df.columns,
-                y=heatmap_df.index,
-                color_continuous_scale=px.colors.sequential.Bluyl,
-                aspect="auto",
-                title="Rainfall Heatmap by Taluka and Time Slot"
+            fig.update_traces(
+                texttemplate='%{y:.1f}',
+                textposition='top center',
+                hovertemplate="""
+                    <b>%{customdata[0]}</b><br><br>
+                    Time Slot: %{x}<br>
+                    Rainfall: %{y:.1f} mm<br>
+                    Category: %{customdata[1]}
+                """,
+                customdata=plot_df[['Taluka', 'Rainfall_Category']]
             )
-            fig.update_layout(
-                xaxis_title="Time Slot",
-                yaxis_title="Taluka",
-                height=600
-            )
+            
+            # --- NEW: Add horizontal lines for thresholds ---
+            # Using the boundary of each category from the classify_rainfall function
+            thresholds = {
+                "Very Light (2.4 mm)": 2.4,
+                "Light (7.5 mm)": 7.5,
+                "Moderate (35.5 mm)": 35.5,
+                "Rather Heavy (64.4 mm)": 64.4,
+                "Heavy (124.4 mm)": 124.4,
+                "Very Heavy (244.4 mm)": 244.4,
+                "Extremely Heavy (350 mm)": 350
+            }
+            
+            for label, value in thresholds.items():
+                fig.add_hline(
+                    y=value,
+                    line_dash="dot",
+                    line_color="darkred",
+                    annotation_text=label,
+                    annotation_position="top left",
+                    annotation_font_size=12,
+                    annotation_font_color="darkred"
+                )
+
+            fig.update_layout(showlegend=True)
+            fig.update_layout(modebar_remove=['toImage'])
+            fig.update_yaxes(rangemode='nonnegative')
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Please select at least one Taluka to view the rainfall trend.")
 
         st.markdown("### 📋 2-Hourly Rainfall Data Table")
         df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)

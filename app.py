@@ -26,17 +26,23 @@ def load_geojson(path):
     st.error(f"GeoJSON file not found at: {path}")
     return None
 
-# --- NEW: Enhanced CSS (with fix) ---
+# --- NEW: Enhanced CSS (with more robust fix) ---
 st.markdown("""
 <style>
-    /* Fix to prevent top content from being cut off */
+    /* Hide Streamlit's default header and footer elements for a cleaner view */
     .stApp > header {
         display: none;
     }
+    .stApp > footer {
+        visibility: hidden;
+    }
+
+    /* Add top padding to the main content container to prevent cutoff */
     .stApp {
         padding-top: 2rem;
     }
 
+    /* Other custom styles */
     html, body, .main {
         background-color: #f3f6fa;
         font-family: 'Segoe UI', sans-serif;

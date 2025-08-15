@@ -13,19 +13,13 @@ import io
 # ---------------------------- CONFIG ----------------------------
 @st.cache_resource
 def get_gsheet_client():
-    """Establishes and caches a gspread client for Google Sheets access."""
-    try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        return gspread.authorize(creds)
-    except Exception as e:
-        st.error(f"Error authenticating with Google Sheets: {e}")
-        return None
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    return gspread.authorize(creds)
 
-@st.cache_data
+@st.cache_resource
 def load_geojson(path):
-    """Loads and caches GeoJSON data from a file."""
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
@@ -116,7 +110,6 @@ category_ranges = {
 }
 
 def classify_rainfall(rainfall):
-    """Classifies a rainfall value into a predefined category."""
     if pd.isna(rainfall) or rainfall == 0:
         return "No Rain"
     elif rainfall > 0 and rainfall <= 2.4:
@@ -145,18 +138,13 @@ ordered_categories = [
 # ---------------------------- UTILITY FUNCTIONS ----------------------------
 
 def generate_title_from_date(selected_date):
-    """Generates a formatted title string for the daily summary."""
     start_date = (selected_date - timedelta(days=1)).strftime("%d-%m-%Y")
     end_date = selected_date.strftime("%d-%m-%Y")
     return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
 
-@st.cache_data(ttl=3600)  # Cache data for 1 hour to reduce API calls
 def load_sheet_data(sheet_name, tab_name):
-    """Loads data from a Google Sheet tab and performs initial cleaning."""
     try:
         client = get_gsheet_client()
-        if not client:
-            return pd.DataFrame()
         sheet = client.open(sheet_name).worksheet(tab_name)
         df = pd.DataFrame(sheet.get_all_records())
         df.columns = df.columns.str.strip()
@@ -165,15 +153,10 @@ def load_sheet_data(sheet_name, tab_name):
         else:
             df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
         return df
-    except gspread.exceptions.WorksheetNotFound as e:
-        # Gracefully handle the case where the worksheet does not exist
-        return pd.DataFrame()
     except Exception as e:
-        st.error(f"Error loading data from Google Sheet: {e}")
         return pd.DataFrame()
 
 def correct_taluka_names(df):
-    """Corrects specific Taluka names to match GeoJSON data."""
     taluka_name_mapping = {
         "Morbi": "Morvi", "Ahmedabad City": "Ahmadabad City", "Maliya Hatina": "Malia",
         "Shihor": "Sihor", "Dwarka": "Okhamandal", "Kalol(Gnr)": "Kalol",
@@ -181,50 +164,43 @@ def correct_taluka_names(df):
     df['Taluka'] = df['Taluka'].replace(taluka_name_mapping)
     return df
 
-@st.cache_data
-def prepare_map_data(df, geo_location_col="Taluka"):
-    """
-    Prepares a DataFrame for plotting on a choropleth map by adding
-    rainfall categories and standardizing location names.
-    """
+# MODIFIED: plot_choropleth function to include watermark and bold labels
+def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
+    geojson_data = load_geojson(geojson_path)
+    if not geojson_data:
+        return go.Figure()
+
     df_plot = df.copy()
 
+    if geo_location_col == "Taluka":
+        df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
+    elif geo_location_col == "District":
+        df_plot["District"] = df_plot["District"].astype(str).str.strip().str.lower()
+
+    color_column = None
     if 'Total_mm' in df_plot.columns:
-        df_plot["Total_mm"] = pd.to_numeric(df_plot["Total_mm"], errors='coerce')
         color_column = 'Total_mm'
     elif 'District_Avg_Rain_Last_24_Hrs' in df_plot.columns:
-        df_plot["District_Avg_Rain_Last_24_Hrs"] = pd.to_numeric(df_plot["District_Avg_Rain_Last_24_Hrs"], errors='coerce')
         color_column = 'District_Avg_Rain_Last_24_Hrs'
     else:
-        st.warning("Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization.")
+        st.warning("Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization. Map may not display categories correctly.")
         df_plot["Rainfall_Category"] = "No Rain"
         color_column = "Rainfall_Category"
 
-    df_plot["Rainfall_Category"] = df_plot[color_column].apply(classify_rainfall)
-    df_plot["Rainfall_Category"] = pd.Categorical(
-        df_plot["Rainfall_Category"],
-        categories=ordered_categories,
-        ordered=True
-    )
-    df_plot["Rainfall_Range"] = df_plot["Rainfall_Category"].map(category_ranges)
+    if color_column:
+        df_plot[color_column] = pd.to_numeric(df_plot[color_column], errors='coerce')
+        df_plot["Rainfall_Category"] = df_plot[color_column].apply(classify_rainfall)
+        df_plot["Rainfall_Category"] = pd.Categorical(
+            df_plot["Rainfall_Category"],
+            categories=ordered_categories,
+            ordered=True
+        )
 
-    if geo_location_col == "Taluka":
-        df_plot['Taluka'] = df_plot['Taluka'].astype(str).str.strip().str.lower()
-    elif geo_location_col == "District":
-        df_plot['District'] = df_plot['District'].astype(str).str.strip().str.lower()
-    
-    return df_plot, color_column
-
-@st.cache_data
-def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_location_col, color_column):
-    """
-    Generates a Plotly choropleth map.
-    This function is now more focused on just plotting the pre-processed data.
-    """
     for feature in geojson_data["features"]:
-        prop_key = geo_feature_id_key.split('.')[-1]
-        if prop_key in feature["properties"]:
-            feature["properties"][prop_key] = feature["properties"][prop_key].strip().lower()
+        if geo_feature_id_key == "properties.SUB_DISTRICT" and "SUB_DISTRICT" in feature["properties"]:
+            feature["properties"]["SUB_DISTRICT"] = feature["properties"]["SUB_DISTRICT"].strip().lower()
+        elif geo_feature_id_key == "properties.district" and "district" in feature["properties"]:
+            feature["properties"]["district"] = feature["properties"]["district"].strip().lower()
 
     fig = px.choropleth_mapbox(
         df_plot,
@@ -238,12 +214,10 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
         center={"lat": 22.5, "lon": 71.5},
         opacity=0.75,
         hover_name=geo_location_col,
-        # UPDATED: Added Rainfall_Range to hover_data
         hover_data={
             color_column: ":.1f mm",
             "District": True if geo_location_col == "Taluka" else False,
-            "Rainfall_Category":False,
-            "Rainfall_Range": True
+            "Rainfall_Category":False
         },
         height=650,
         title=f"<b>{title}</b>"
@@ -262,6 +236,7 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
             font=dict(size=10),
             itemsizing='constant',
         ),
+        # ADDED: Watermark annotation
         annotations=[
             go.layout.Annotation(
                 text="<b>Gujarat Weatherman</b>",
@@ -272,13 +247,13 @@ def plot_choropleth(df_plot, geojson_data, title, geo_feature_id_key, geo_locati
                 xanchor='right', yanchor='bottom'
             )
         ],
+        # MODIFIED: Remove download button from modebar
         modebar=dict(remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
     )
     return fig
 
 
 def show_24_hourly_dashboard(df, selected_date):
-    """Renders the Daily Summary dashboard."""
     df = correct_taluka_names(df)
     if "Rain_Last_24_Hrs" in df.columns:
         df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
@@ -306,8 +281,9 @@ def show_24_hourly_dashboard(df, selected_date):
     df['District'] = df['District'].astype(str).str.strip()
 
     title = generate_title_from_date(selected_date)
-    st.markdown(f"### <b>{title}</b>", unsafe_allow_html=True)
+    st.markdown(f"### <b>{title}</b>", unsafe_allow_html=True) # MODIFIED: make subheader bold
     st.markdown("---")
+
 
     state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
     state_avg_24hr = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
@@ -317,9 +293,11 @@ def show_24_hourly_dashboard(df, selected_date):
     highest_district = highest_district_row['District']
     highest_district_avg = highest_district_row['Total_mm']
     
+    # New tile: "Talukas with Rainfall"
     TOTAL_TALUKAS_GUJARAT = 251
     num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
 
+    # --- NEW: Donut Chart and Metrics in two columns ---
     col_donut, col_metrics = st.columns([0.3, 0.7])
 
     with col_donut:
@@ -346,6 +324,7 @@ def show_24_hourly_dashboard(df, selected_date):
             margin=dict(l=20, r=20, t=50, b=20),
             paper_bgcolor='rgba(0,0,0,0)',
             showlegend=False,
+            # MODIFIED: make annotation bold
             annotations=[dict(
                 text=f"<b>{state_rainfall_progress_percentage:.1f}%</b>",
                 x=0.5, y=0.5,
@@ -357,6 +336,7 @@ def show_24_hourly_dashboard(df, selected_date):
         st.plotly_chart(fig_donut, use_container_width=True)
 
     with col_metrics:
+        # Top Row of Tiles
         col_top1, col_top2 = st.columns(2)
         with col_top1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -367,6 +347,7 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown(f"<div class='metric-tile'><h4><b>State Avg. Rain (last 24 hrs)</b></h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
+        # Bottom Row of Tiles
         col_bottom1, col_bottom2, col_bottom3 = st.columns(3)
         with col_bottom1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -389,12 +370,25 @@ def show_24_hourly_dashboard(df, selected_date):
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
         columns={'Total_mm': 'District_Avg_Rain_Last_24_Hrs'}
     )
-    
-    # Prepare map data with caching
-    df_plot_dist, color_col_dist = prepare_map_data(district_rainfall_avg_df, geo_location_col="District")
-    df_plot_tal, color_col_tal = prepare_map_data(df, geo_location_col="Taluka")
+    district_rainfall_avg_df["Rainfall_Category"] = district_rainfall_avg_df["District_Avg_Rain_Last_24_Hrs"].apply(classify_rainfall)
+    district_rainfall_avg_df["Rainfall_Category"] = pd.Categorical(
+        district_rainfall_avg_df["Rainfall_Category"],
+        categories=ordered_categories,
+        ordered=True
+    )
+    district_rainfall_avg_df['Rainfall_Range'] = district_rainfall_avg_df['Rainfall_Category'].map(category_ranges)
 
-    # Load geojson files once
+
+    df_map_talukas = df.copy()
+    df_map_talukas["Taluka"] = df_map_talukas["Taluka"].str.strip().str.lower()
+    df_map_talukas["Rainfall_Category"] = df_map_talukas["Total_mm"].apply(classify_rainfall)
+    df_map_talukas["Rainfall_Category"] = pd.Categorical(
+        df_map_talukas["Rainfall_Category"],
+        categories=ordered_categories,
+        ordered=True
+    )
+    df_map_talukas["Rainfall_Range"] = df_map_talukas["Rainfall_Category"].map(category_ranges)
+
     taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
     district_geojson = load_geojson("gujarat_district_clean.geojson")
 
@@ -413,19 +407,18 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown("#### <b>Gujarat Rainfall Map (by District)</b>", unsafe_allow_html=True)
             with st.spinner("Loading district map..."):
                 fig_map_districts = plot_choropleth(
-                    df_plot_dist,
-                    district_geojson,
-                    "Gujarat Daily Rainfall Distribution by District",
-                    "properties.district",
-                    "District",
-                    color_col_dist
+                    district_rainfall_avg_df,
+                    "gujarat_district_clean.geojson",
+                    title="Gujarat Daily Rainfall Distribution by District",
+                    geo_feature_id_key="properties.district",
+                    geo_location_col="District"
                 )
                 st.plotly_chart(fig_map_districts, use_container_width=True)
 
         with insights_col_dist:
             st.markdown("#### <b>Key Insights & Distributions (Districts)</b>", unsafe_allow_html=True)
 
-            category_counts_dist = df_plot_dist['Rainfall_Category'].value_counts().reset_index()
+            category_counts_dist = district_rainfall_avg_df['Rainfall_Category'].value_counts().reset_index()
             category_counts_dist.columns = ['Category', 'Count']
             category_counts_dist['Category'] = pd.Categorical(
                 category_counts_dist['Category'],
@@ -443,14 +436,11 @@ def show_24_hourly_dashboard(df, selected_date):
                 labels={'Count': '<b>Number of Districts</b>'},
                 color='Category',
                 color_discrete_map=color_map,
-                text='Count' # Add text to the bars
-            )
-            # FIXED: Corrected hovertemplate to show Rainfall Range on bar chart
-            fig_category_dist_dist.update_traces(
-                texttemplate='<b>%{text}</b>', 
-                textposition='outside', 
-                hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
-                customdata=category_counts_dist[['Rainfall_Range']]
+                hover_data={
+                    'Category': True,
+                    'Rainfall_Range': True,
+                    'Count': True
+                }
             )
             fig_category_dist_dist.update_layout(
                 xaxis=dict(
@@ -465,6 +455,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
+            fig_category_dist_dist.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
             fig_category_dist_dist.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
 
             st.plotly_chart(fig_category_dist_dist, use_container_width=True, key="district_insights_bar_chart")
@@ -477,18 +468,18 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown("#### <b>Gujarat Rainfall Map (by Taluka)</b>", unsafe_allow_html=True)
             with st.spinner("Loading taluka map..."):
                 fig_map_talukas = plot_choropleth(
-                    df_plot_tal,
-                    taluka_geojson,
-                    "Gujarat Daily Rainfall Distribution by Taluka",
-                    "properties.SUB_DISTRICT",
-                    "Taluka",
-                    color_col_tal
+                    df_map_talukas,
+                    "gujarat_taluka_clean.geojson",
+                    title="Gujarat Daily Rainfall Distribution by Taluka",
+                    geo_feature_id_key="properties.SUB_DISTRICT",
+                    geo_location_col="Taluka"
                 )
                 st.plotly_chart(fig_map_talukas, use_container_width=True, key="taluka_map_chart")
 
         with insights_col_tal:
             st.markdown("#### <b>Key Insights & Distributions (Talukas)</b>", unsafe_allow_html=True)
             
+            # Moved pie chart here
             TOTAL_TALUKAS_GUJARAT = 251
             num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
             talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
@@ -512,7 +503,7 @@ def show_24_hourly_dashboard(df, selected_date):
             fig_pie.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
             st.plotly_chart(fig_pie, use_container_width=True)
 
-            category_counts_tal = df_plot_tal['Rainfall_Category'].value_counts().reset_index()
+            category_counts_tal = df_map_talukas['Rainfall_Category'].value_counts().reset_index()
             category_counts_tal.columns = ['Category', 'Count']
             category_counts_tal['Category'] = pd.Categorical(
                 category_counts_tal['Category'],
@@ -530,14 +521,11 @@ def show_24_hourly_dashboard(df, selected_date):
                 labels={'Count': '<b>Number of Talukas</b>'},
                 color='Category',
                 color_discrete_map=color_map,
-                text='Count' # Add text to the bars
-            )
-            # FIXED: Corrected hovertemplate to show Rainfall Range on bar chart
-            fig_category_dist_tal.update_traces(
-                texttemplate='<b>%{text}</b>', 
-                textposition='outside', 
-                hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
-                customdata=category_counts_tal[['Rainfall_Range']]
+                hover_data={
+                    'Category': True,
+                    'Rainfall_Range': True,
+                    'Count': True
+                }
             )
             fig_category_dist_tal.update_layout(
                 xaxis=dict(
@@ -552,6 +540,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 height=350,
                 margin=dict(l=0, r=0, t=50, b=0)
             )
+            fig_category_dist_tal.update_traces(hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[1]}<br>Count: %{y}<extra></extra>')
             fig_category_dist_tal.update_layout(modebar_remove=['toImage', 'sendDataToCloud', 'hoverClosestCartesian', 'toggleSpikelines'])
             st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart")
 
@@ -590,8 +579,80 @@ def show_24_hourly_dashboard(df, selected_date):
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
 
-def show_hourly_dashboard(df_2hr, selected_date):
-    """Renders the Hourly Trends dashboard."""
+# ---------------------------- UI ----------------------------
+st.set_page_config(layout="wide")
+st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+# ADDED: Copyright/branding
+st.markdown("<h6 style='text-align: right; color: #757575; margin-top: -10px; margin-bottom: 20px;'>Developed by <b>Ankit Patel (Gujarat Weatherman)</b></h6>", unsafe_allow_html=True)
+st.markdown("---")
+# FIXED: Replaced st.subheader with st.markdown for HTML support
+st.markdown("### 🗓️ <b>Select Date for Rainfall Data</b>", unsafe_allow_html=True)
+
+if 'selected_date' not in st.session_state:
+    st.session_state.selected_date = datetime.today().date()
+
+col_date_picker, col_prev_btn, col_today_btn, col_next_btn = st.columns([0.2, 0.1, 0.1, 0.1])
+
+with col_date_picker:
+    selected_date_from_picker = st.date_input(
+        "Choose Date",
+        value=st.session_state.selected_date,
+        help="Select a specific date to view its rainfall summary."
+    )
+    if selected_date_from_picker != st.session_state.selected_date:
+        st.session_state.selected_date = selected_date_from_picker
+        st.rerun()
+
+selected_date = st.session_state.selected_date
+
+with col_prev_btn:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("⬅️ Previous Day", key="prev_day_btn"):
+        st.session_state.selected_date = selected_date - timedelta(days=1)
+        st.rerun()
+
+with col_today_btn:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🗓️ Today", key="today_btn"):
+        st.session_state.selected_date = datetime.today().date()
+        st.rerun()
+
+with col_next_btn:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Next Day ➡️", key="next_day_btn", disabled=(selected_date >= datetime.today().date())):
+        st.session_state.selected_date = selected_date + timedelta(days=1)
+        st.rerun()
+
+st.markdown("---")
+
+selected_year = selected_date.strftime("%Y")
+selected_month = selected_date.strftime("%B")
+selected_date_str = selected_date.strftime("%Y-%m-%d")
+
+tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
+
+with tab_daily:
+    # FIXED: Replaced st.header with st.markdown for HTML support
+    st.markdown("## <b>Daily Rainfall Summary</b>", unsafe_allow_html=True)
+
+    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name_24hr = f"master24hrs_{selected_date_str}"
+
+    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
+
+    if not df_24hr.empty:
+        show_24_hourly_dashboard(df_24hr, selected_date)
+    else:
+        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
+
+with tab_hourly:
+    # FIXED: Replaced st.header with st.markdown for HTML support
+    st.markdown("## <b>Hourly Rainfall Trends (2-Hourly)</b>", unsafe_allow_html=True)
+    sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name_2hr = f"2hrs_master_{selected_date_str}"
+
+    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
+
     if not df_2hr.empty:
         df_2hr = correct_taluka_names(df_2hr)
         df_2hr.columns = df_2hr.columns.str.strip()
@@ -690,84 +751,7 @@ def show_hourly_dashboard(df_2hr, selected_date):
     else:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
-def show_historical_dashboard():
-    """Renders the Historical Data tab (placeholder)."""
+with tab_historical:
+    # FIXED: Replaced st.header with st.markdown for HTML support
     st.markdown("## <b>Historical Rainfall Data</b>", unsafe_allow_html=True)
     st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
-
-# ---------------------------- MAIN APP LAYOUT ----------------------------
-st.set_page_config(layout="wide")
-st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
-st.markdown("<h6 style='text-align: right; color: #757575; margin-top: -10px; margin-bottom: 20px;'>Developed by <b>Ankit Patel (Gujarat Weatherman)</b></h6>", unsafe_allow_html=True)
-st.markdown("---")
-st.markdown("### 🗓️ <b>Select Date for Rainfall Data</b>", unsafe_allow_html=True)
-
-if 'selected_date' not in st.session_state:
-    st.session_state.selected_date = datetime.today().date()
-if 'active_tab_state' not in st.session_state:
-    st.session_state.active_tab_state = "Hourly Trends"
-
-col_date_picker, col_prev_btn, col_today_btn, col_next_btn = st.columns([0.2, 0.1, 0.1, 0.1])
-
-with col_date_picker:
-    selected_date_from_picker = st.date_input(
-        "Choose Date",
-        value=st.session_state.selected_date,
-        help="Select a specific date to view its rainfall summary."
-    )
-    if selected_date_from_picker != st.session_state.selected_date:
-        st.session_state.selected_date = selected_date_from_picker
-        st.rerun()
-
-selected_date = st.session_state.selected_date
-
-with col_prev_btn:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("⬅️ Previous Day", key="prev_day_btn"):
-        st.session_state.selected_date = selected_date - timedelta(days=1)
-        st.rerun()
-
-with col_today_btn:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🗓️ Today", key="today_btn"):
-        st.session_state.selected_date = datetime.today().date()
-        st.rerun()
-
-with col_next_btn:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Next Day ➡️", key="next_day_btn", disabled=(selected_date >= datetime.today().date())):
-        st.session_state.selected_date = selected_date + timedelta(days=1)
-        st.rerun()
-
-st.markdown("---")
-
-selected_year = selected_date.strftime("%Y")
-selected_month = selected_date.strftime("%B")
-selected_date_str = selected_date.strftime("%Y-%m-%d")
-
-# Change 1: Reordering the tabs to show Hourly Trends first.
-tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
-
-# Change 2: Reordering the data loading and display logic to match the new tab order.
-with tab_hourly:
-    st.markdown("## <b>Hourly Rainfall Trends (2-Hourly)</b>", unsafe_allow_html=True)
-    sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_2hr = f"2hrs_master_{selected_date_str}"
-    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
-    if not df_2hr.empty:
-        show_hourly_dashboard(df_2hr, selected_date)
-    else:
-        st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
-
-with tab_daily:
-    st.markdown("## <b>Daily Rainfall Summary</b>", unsafe_allow_html=True)
-    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_24hr = f"master24hrs_{selected_date_str}"
-    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
-    if not df_24hr.empty:
-        show_24_hourly_dashboard(df_24hr, selected_date)
-    else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
-
-with tab_historical:
-    show_historical_dashboard()

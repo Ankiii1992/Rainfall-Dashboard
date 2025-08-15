@@ -689,26 +689,41 @@ with tab_hourly:
             y_axis_range_max = max_y_value * 1.15 if max_y_value > 0 else 5.0
             
             fig = go.Figure()
-            colors = px.colors.qualitative.Plotly
             
-            for i, taluka in enumerate(selected_talukas):
-                taluka_df = plot_df[plot_df['Taluka'] == taluka]
+            for taluka in selected_talukas:
+                taluka_df = plot_df[plot_df['Taluka'] == taluka].copy()
                 
+                # Assign colors based on rainfall category
+                taluka_df['category'] = taluka_df['Rainfall (mm)'].apply(classify_rainfall)
+                taluka_df['color'] = taluka_df['category'].map(color_map)
+
                 fig.add_trace(go.Scatter(
                     x=taluka_df['Time Slot Label'],
                     y=taluka_df['Rainfall (mm)'],
                     name=taluka,
-                    mode='lines+markers+text',
+                    mode='lines',
+                    line=dict(width=4, color=taluka_df['color'].iloc[-1]), # Use the color of the latest data point for the line
+                    hovertemplate="""
+                        <b>%{fullData.name}</b><br>
+                        Time Slot: %{x}<br>
+                        Rainfall: %{y:.1f} mm
+                    """
+                ))
+
+                fig.add_trace(go.Scatter(
+                    x=taluka_df['Time Slot Label'],
+                    y=taluka_df['Rainfall (mm)'],
+                    name=taluka,
+                    mode='markers+text',
                     text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{x:.1f}'),
                     textposition='middle center',
-                    line=dict(width=4, color=colors[i % len(colors)]),
                     marker=dict(
                         size=30,
-                        color=colors[i % len(colors)],
+                        color=taluka_df['color'], # Color circles based on each point's category
                         line=dict(width=1.5, color='White')
                     ),
                     textfont=dict(
-                        color='white',
+                        color='black',
                         size=14,
                         family="Arial Black"
                     ),
@@ -716,7 +731,8 @@ with tab_hourly:
                         <b>%{fullData.name}</b><br>
                         Time Slot: %{x}<br>
                         Rainfall: %{y:.1f} mm
-                    """
+                    """,
+                    showlegend=False
                 ))
             
             fig.update_layout(

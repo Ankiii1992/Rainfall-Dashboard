@@ -26,9 +26,17 @@ def load_geojson(path):
     st.error(f"GeoJSON file not found at: {path}")
     return None
 
-# --- NEW: Enhanced CSS (from reference code) ---
+# --- NEW: Enhanced CSS (with fix) ---
 st.markdown("""
 <style>
+    /* Fix to prevent top content from being cut off */
+    .stApp > header {
+        display: none;
+    }
+    .stApp {
+        padding-top: 2rem;
+    }
+
     html, body, .main {
         background-color: #f3f6fa;
         font-family: 'Segoe UI', sans-serif;
@@ -706,9 +714,13 @@ with tab_hourly:
                 textfont=dict(size=16, family="Arial Black")
             )
             
-            fig.update_layout(showlegend=True)
-            fig.update_layout(modebar_remove=['toImage'])
-            fig.update_yaxes(rangemode='nonnegative')
+            fig.update_layout(
+                showlegend=True,
+                modebar_remove=['toImage'],
+                yaxis_rangemode='nonnegative',
+                # This is the fix to prevent cutoff
+                margin=dict(t=70) 
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Please select at least one Taluka to view the rainfall trend.")

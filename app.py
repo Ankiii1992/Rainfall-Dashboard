@@ -77,7 +77,7 @@ st.markdown("""
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -297,7 +297,7 @@ def show_24_hourly_dashboard(df, selected_date):
 
     title = generate_title_from_date(selected_date)
     st.subheader(title)
-
+    st.markdown("<hr>", unsafe_allow_html=True)  # <-- Add the line here
 
     state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
     state_avg_24hr = df["Total_mm"].mean() if not df["Total_mm"].isnull().all() else 0.0
@@ -313,7 +313,7 @@ def show_24_hourly_dashboard(df, selected_date):
     col_donut, col_metrics = st.columns([0.3, 0.7])
 
     with col_donut:
-        st.markdown("<h4 style='text-align: center;'>State Seasonal Avg. Rainfall Till Today (%)</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='text-align: center;'>State Seasonal Rainfall Till Today (%)</h4>", unsafe_allow_html=True)
         donut_data = pd.DataFrame({
             'Category': ['Completed', 'Remaining'],
             'Value': [state_rainfall_progress_percentage, 100 - state_rainfall_progress_percentage]
@@ -350,7 +350,7 @@ def show_24_hourly_dashboard(df, selected_date):
         col_top1, col_top2 = st.columns(2)
         with col_top1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-            st.markdown(f"<div class='metric-tile'><h4>State Total Seasonal Rainfall Till Today (Avg.)</h4><h2>{state_total_seasonal_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-tile'><h4>State Total Seasonal Rainfall Till Today </h4><h2>{state_total_seasonal_avg:.1f} mm</h2></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
         with col_top2:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -554,6 +554,7 @@ def show_24_hourly_dashboard(df, selected_date):
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
 
+
 # ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
 
@@ -567,6 +568,10 @@ st.subheader("🗓️ Select Date for Rainfall Data")
 
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.today().date()
+if 'daily_data' not in st.session_state:
+    st.session_state.daily_data = pd.DataFrame()
+if 'hourly_data' not in st.session_state:
+    st.session_state.hourly_data = pd.DataFrame()
 
 col_date_picker, col_prev_btn, col_today_btn, col_next_btn = st.columns([0.2, 0.1, 0.1, 0.1])
 with col_date_picker:
@@ -577,6 +582,9 @@ with col_date_picker:
     )
     if selected_date_from_picker != st.session_state.selected_date:
         st.session_state.selected_date = selected_date_from_picker
+        st.session_state.daily_data = pd.DataFrame() # Clear data for new date
+        st.session_state.hourly_data = pd.DataFrame() # Clear data for new date
+        st.cache_data.clear() # Clear cache for new date
         st.rerun()
 
 selected_date = st.session_state.selected_date
@@ -584,200 +592,210 @@ with col_prev_btn:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("⬅️ Previous Day", key="prev_day_btn"):
         st.session_state.selected_date = selected_date - timedelta(days=1)
+        st.session_state.daily_data = pd.DataFrame()
+        st.session_state.hourly_data = pd.DataFrame()
+        st.cache_data.clear()
         st.rerun()
 
 with col_today_btn:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🗓️ Today", key="today_btn"):
         st.session_state.selected_date = datetime.today().date()
+        st.session_state.daily_data = pd.DataFrame()
+        st.session_state.hourly_data = pd.DataFrame()
+        st.cache_data.clear()
         st.rerun()
 
 with col_next_btn:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("Next Day ➡️", key="next_day_btn", disabled=(selected_date >= datetime.today().date())):
         st.session_state.selected_date = selected_date + timedelta(days=1)
+        st.session_state.daily_data = pd.DataFrame()
+        st.session_state.hourly_data = pd.DataFrame()
+        st.cache_data.clear()
         st.rerun()
 
-
+# Load data based on selected date
 selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")
 selected_date_str = selected_date.strftime("%Y-%m-%d")
 
-tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
-
-with tab_hourly:
-    st.header("Hourly Rainfall Trends (2-Hourly)")
-    sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_2hr = f"2hrs_master_{selected_date_str}"
-
-    df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
-
-    if not df_2hr.empty:
-        df_2hr = correct_taluka_names(df_2hr)
-        df_2hr.columns = df_2hr.columns.str.strip()
-
-        time_slot_columns = [col for col in df_2hr.columns if "TO" in col and df_2hr[col].dtype in ['int64', 'float64', 'object']]
-        time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
-                           '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
-        existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
-
-        for col in existing_order:
-            df_2hr[col] = pd.to_numeric(df_2hr[col], errors="coerce")
-
-        df_2hr['Total_mm'] = df_2hr[existing_order].sum(axis=1)
-
-        df_long = df_2hr.melt(
-            id_vars=["District", "Taluka", "Total_mm"],
-            value_vars=existing_order,
-            var_name="Time Slot",
-            value_name="Rainfall (mm)"
-        )
-        df_long = df_long.dropna(subset=["Rainfall (mm)"])
-        df_long['Taluka'] = df_long['Taluka'].str.strip()
-
-        df_long = df_long.groupby(["District", "Taluka", "Time Slot"], as_index=False).agg({
-            "Rainfall (mm)": "sum",
-            "Total_mm": "first"
-        })
-
-        slot_labels = {
-            "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10TO12": "10–12 AM",
-            "12TO14": "12–2 PM", "14TO16": "2–4 PM", "16TO18": "4–6 PM",
-            "18TO20": "6–8 PM", "20TO22": "8–10 PM", "22TO24": "10–12 PM",
-            "24TO02": "12–2 AM", "02TO04": "2–4 AM", "04TO06": "4–6 AM",
-        }
-        df_long['Time Slot Label'] = pd.Categorical(
-            df_long['Time Slot'].map(slot_labels),
-            categories=[slot_labels[s] for s in existing_order],
-            ordered=True
-        )
+# This is the crucial part that fixes the 504 error
+if st.button("📊 Load Rainfall Data for Selected Date"):
+    with st.spinner(f"Fetching data for {selected_date_str}... This may take a moment."):
+        # Daily Data
+        daily_sheet_name = "Daily_Rainfall_24_Hrs"
+        daily_tab_name = selected_date_str
+        st.session_state.daily_data = load_sheet_data(daily_sheet_name, daily_tab_name)
         
-        df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
+        # Hourly Data
+        hourly_sheet_name = f"2HR_Rainfall_{selected_month}_{selected_year}"
+        hourly_tab_name = f"2hrs_master_{selected_date_str}"
+        st.session_state.hourly_data = load_sheet_data(hourly_sheet_name, hourly_tab_name)
+    st.success("Data loaded successfully!")
+    st.rerun()
 
-        df_2hr['Total_mm'] = pd.to_numeric(df_2hr['Total_mm'], errors='coerce')
-
-        top_taluka_row = df_2hr.sort_values(by='Total_mm', ascending=False).iloc[0] if not df_2hr['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
-        df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
-        top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
-        num_talukas_with_rain_hourly = df_2hr[df_2hr['Total_mm'] > 0].shape[0]
-
-        st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
-
-        row1 = st.columns(3)
-
-        last_slot_label = slot_labels[existing_order[-1]]
-
-        row1_titles = [
-            ("Total Talukas with Rainfall", num_talukas_with_rain_hourly),
-            ("Highest Rainfall Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
-            (f"Highest Rainfall in last 2 hours ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
-        ]
-
-        for col, (label, value) in zip(row1, row1_titles):
-            with col:
-                st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
-                st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-        
-        st.markdown("### 📈 Rainfall Trend by 2-hourly Time Interval")
-        
-        selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
+# Display content only if data is loaded
+if not st.session_state.daily_data.empty:
+    tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
     
-        if selected_talukas:
-            plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
-            max_y_value = plot_df['Rainfall (mm)'].max() if not plot_df['Rainfall (mm)'].dropna().empty else 1.0
-            y_axis_range_max = max_y_value * 1.15 if max_y_value > 0 else 5.0
-            
-            fig = go.Figure()
-            
-            for taluka in selected_talukas:
-                taluka_df = plot_df[plot_df['Taluka'] == taluka].copy()
-                
-                taluka_df['category'] = taluka_df['Rainfall (mm)'].apply(classify_rainfall)
-                taluka_df['color'] = taluka_df['category'].map(color_map)
+    with tab_daily:
+        st.header("Daily Rainfall Summary")
+        show_24_hourly_dashboard(st.session_state.daily_data, selected_date)
+    
+    with tab_hourly:
+        st.header("Hourly Rainfall Trends (2-Hourly)")
+        if not st.session_state.hourly_data.empty:
+            df_2hr = st.session_state.hourly_data
+            df_2hr = correct_taluka_names(df_2hr)
+            df_2hr.columns = df_2hr.columns.str.strip()
 
-                fig.add_trace(go.Scatter(
-                    x=taluka_df['Time Slot Label'],
-                    y=taluka_df['Rainfall (mm)'],
-                    name=taluka,
-                    mode='lines',
-                    # --- START OF CHANGE ---
-                    line=dict(width=4, color='#1A237E'),
-                    # --- END OF CHANGE ---
-                    hovertemplate="""
-                        <b>%{fullData.name}</b><br>
-                        Time Slot: %{x}<br>
-                        Rainfall: %{y:.1f} mm
-                    """
-                ))
+            time_slot_columns = [col for col in df_2hr.columns if "TO" in col and df_2hr[col].dtype in ['int64', 'float64', 'object']]
+            time_slot_order = ['06TO08', '08TO10', '10TO12', '12TO14', '14TO16', '16TO18',
+                               '18TO20', '20TO22', '22TO24', '24TO02', '02TO04', '04TO06']
+            existing_order = [slot for slot in time_slot_order if slot in time_slot_columns]
 
-                fig.add_trace(go.Scatter(
-                    x=taluka_df['Time Slot Label'],
-                    y=taluka_df['Rainfall (mm)'],
-                    name=taluka,
-                    mode='markers+text',
-                    text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{int(x)}'),
-                    textposition='middle center',
-                    marker=dict(
-                        size=30,
-                        color=taluka_df['color'],
-                        line=dict(width=1.5, color='White')
-                    ),
-                    textfont=dict(
-                        color='black',
-                        size=14,
-                        family="Arial Black"
-                    ),
-                    hovertemplate="""
-                        <b>%{fullData.name}</b><br>
-                        Time Slot: %{x}<br>
-                        Rainfall: %{y:.1f} mm
-                    """,
-                    showlegend=False
-                ))
-            
-            fig.update_layout(
-                title='Rainfall Trend Over Time for Selected Talukas',
-                xaxis_title='Time Slot',
-                yaxis_title='Rainfall (mm)',
-                showlegend=True,
-                modebar_remove=['toImage'],
-                yaxis_rangemode='normal',
-                yaxis_range=[0, y_axis_range_max],
-                margin=dict(t=70),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                )
+            for col in existing_order:
+                df_2hr[col] = pd.to_numeric(df_2hr[col], errors="coerce")
+
+            df_2hr['Total_mm'] = df_2hr[existing_order].sum(axis=1)
+
+            df_long = df_2hr.melt(
+                id_vars=["District", "Taluka", "Total_mm"],
+                value_vars=existing_order,
+                var_name="Time Slot",
+                value_name="Rainfall (mm)"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            df_long = df_long.dropna(subset=["Rainfall (mm)"])
+            df_long['Taluka'] = df_long['Taluka'].str.strip()
+
+            df_long = df_long.groupby(["District", "Taluka", "Time Slot"], as_index=False).agg({
+                "Rainfall (mm)": "sum",
+                "Total_mm": "first"
+            })
+
+            slot_labels = {
+                "06TO08": "6–8 AM", "08TO10": "8–10 AM", "10TO12": "10–12 AM",
+                "12TO14": "12–2 PM", "14TO16": "2–4 PM", "16TO18": "4–6 PM",
+                "18TO20": "6–8 PM", "20TO22": "8–10 PM", "22TO24": "10–12 PM",
+                "24TO02": "12–2 AM", "02TO04": "2–4 AM", "04TO06": "4–6 AM",
+            }
+            df_long['Time Slot Label'] = pd.Categorical(
+                df_long['Time Slot'].map(slot_labels),
+                categories=[slot_labels[s] for s in existing_order],
+                ordered=True
+            )
+            
+            df_long = df_long.sort_values(by=["Taluka", "Time Slot Label"])
+
+            df_2hr['Total_mm'] = pd.to_numeric(df_2hr['Total_mm'], errors='coerce')
+
+            top_taluka_row = df_2hr.sort_values(by='Total_mm', ascending=False).iloc[0] if not df_2hr['Total_mm'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Total_mm': 0})
+            df_latest_slot = df_long[df_long['Time Slot'] == existing_order[-1]]
+            top_latest = df_latest_slot.sort_values(by='Rainfall (mm)', ascending=False).iloc[0] if not df_latest_slot['Rainfall (mm)'].dropna().empty else pd.Series({'Taluka': 'N/A', 'Rainfall (mm)': 0})
+            num_talukas_with_rain_hourly = df_2hr[df_2hr['Total_mm'] > 0].shape[0]
+
+            st.markdown(f"#### 📊 Latest data available for time interval: **{slot_labels[existing_order[-1]]}**")
+
+            row1 = st.columns(3)
+
+            last_slot_label = slot_labels[existing_order[-1]]
+
+            row1_titles = [
+                ("Total Talukas with Rainfall", num_talukas_with_rain_hourly),
+                ("Highest Rainfall Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
+                (f"Highest Rainfall in last 2 hours ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
+            ]
+
+            for col, (label, value) in zip(row1, row1_titles):
+                with col:
+                    st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+            
+            st.markdown("### 📈 Rainfall Trend by 2-hourly Time Interval")
+            
+            selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
+            
+            if selected_talukas:
+                plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
+                max_y_value = plot_df['Rainfall (mm)'].max() if not plot_df['Rainfall (mm)'].dropna().empty else 1.0
+                y_axis_range_max = max_y_value * 1.15 if max_y_value > 0 else 5.0
+                
+                fig = go.Figure()
+                
+                for taluka in selected_talukas:
+                    taluka_df = plot_df[plot_df['Taluka'] == taluka].copy()
+                    
+                    taluka_df['category'] = taluka_df['Rainfall (mm)'].apply(classify_rainfall)
+                    taluka_df['color'] = taluka_df['category'].map(color_map)
+
+                    fig.add_trace(go.Scatter(
+                        x=taluka_df['Time Slot Label'],
+                        y=taluka_df['Rainfall (mm)'],
+                        name=taluka,
+                        mode='lines',
+                        line=dict(width=4, color='#1A237E'),
+                        hovertemplate="""
+                            <b>%{fullData.name}</b><br>
+                            Time Slot: %{x}<br>
+                            Rainfall: %{y:.1f} mm
+                        """
+                    ))
+
+                    fig.add_trace(go.Scatter(
+                        x=taluka_df['Time Slot Label'],
+                        y=taluka_df['Rainfall (mm)'],
+                        name=taluka,
+                        mode='markers+text',
+                        text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{int(x)}' if x is not None and x.is_integer() else f'{x:.1f}'),
+                        textposition='middle center',
+                        marker=dict(
+                            size=30,
+                            color=taluka_df['color'],
+                            line=dict(width=1.5, color='White')
+                        ),
+                        textfont=dict(
+                            color='black',
+                            size=14,
+                            family="Arial Black"
+                        ),
+                        hovertemplate="""
+                            <b>%{fullData.name}</b><br>
+                            Time Slot: %{x}<br>
+                            Rainfall: %{y:.1f} mm
+                        """,
+                        showlegend=False
+                    ))
+                
+                fig.update_layout(
+                    title='Rainfall Trend Over Time for Selected Talukas',
+                    xaxis_title='Time Slot',
+                    yaxis_title='Rainfall (mm)',
+                    showlegend=True,
+                    modebar_remove=['toImage'],
+                    yaxis_rangemode='normal',
+                    yaxis_range=[0, y_axis_range_max],
+                    margin=dict(t=70),
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="right",
+                        x=1
+                    )
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Please select at least one Taluka to view the rainfall trend.")
+
+            st.markdown("### 📋 2-Hourly Rainfall Data Table")
+            df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
+            df_display_2hr.index += 1
+            st.dataframe(df_display_2hr, use_container_width=True, height=600)
+
         else:
-            st.info("Please select at least one Taluka to view the rainfall trend.")
+            st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
-        st.markdown("### 📋 2-Hourly Rainfall Data Table")
-        df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
-        df_display_2hr.index += 1
-        st.dataframe(df_display_2hr, use_container_width=True, height=600)
-
-    else:
-        st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
-
-with tab_daily:
-    st.header("Daily Rainfall Summary")
-
-    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_24hr = f"master24hrs_{selected_date_str}"
-
-    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
-
-    if not df_24hr.empty:
-        show_24_hourly_dashboard(df_24hr, selected_date)
-    else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
-
-with tab_historical:
-    st.header("Historical Rainfall Data")
-    st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
+else:
+    st.info("Please select a date and click '📊 Load Rainfall Data for Selected Date' to view the dashboard.")

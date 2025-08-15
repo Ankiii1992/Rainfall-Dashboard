@@ -280,7 +280,7 @@ def show_24_hourly_dashboard(df, selected_date):
     df['District'] = df['District'].astype(str).str.strip()
 
     title = generate_title_from_date(selected_date)
-    st.subheader(f"<b>{title}</b>", unsafe_allow_html=True) # MODIFIED: make subheader bold
+    st.markdown(f"### <b>{title}</b>", unsafe_allow_html=True) # MODIFIED: make subheader bold
     st.markdown("---")
 
 
@@ -573,7 +573,7 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         st.info("No rainfall data available to determine top 10 talukas.")
 
-    st.subheader("📋 <b>Full Daily Rainfall Data Table</b>", unsafe_allow_html=True)
+    st.markdown("### 📋 <b>Full Daily Rainfall Data Table</b>", unsafe_allow_html=True)
     df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
@@ -584,7 +584,8 @@ st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", 
 # ADDED: Copyright/branding
 st.markdown("<h6 style='text-align: right; color: #757575; margin-top: -10px; margin-bottom: 20px;'>Developed by <b>Ankit Patel (Gujarat Weatherman)</b></h6>", unsafe_allow_html=True)
 st.markdown("---")
-st.subheader("🗓️ <b>Select Date for Rainfall Data</b>", unsafe_allow_html=True)
+# FIXED: Replaced st.subheader with st.markdown for HTML support
+st.markdown("### 🗓️ <b>Select Date for Rainfall Data</b>", unsafe_allow_html=True)
 
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.today().date()
@@ -630,7 +631,8 @@ selected_date_str = selected_date.strftime("%Y-%m-%d")
 tab_daily, tab_hourly, tab_historical = st.tabs(["Daily Summary", "Hourly Trends", "Historical Data (Coming Soon)"])
 
 with tab_daily:
-    st.header("<b>Daily Rainfall Summary</b>", unsafe_allow_html=True)
+    # FIXED: Replaced st.header with st.markdown for HTML support
+    st.markdown("## <b>Daily Rainfall Summary</b>", unsafe_allow_html=True)
 
     sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_24hr = f"master24hrs_{selected_date_str}"
@@ -643,7 +645,8 @@ with tab_daily:
         st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_hourly:
-    st.header("<b>Hourly Rainfall Trends (2-Hourly)</b>", unsafe_allow_html=True)
+    # FIXED: Replaced st.header with st.markdown for HTML support
+    st.markdown("## <b>Hourly Rainfall Trends (2-Hourly)</b>", unsafe_allow_html=True)
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
     tab_name_2hr = f"2hrs_master_{selected_date_str}"
 
@@ -748,5 +751,6 @@ with tab_hourly:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
 with tab_historical:
-    st.header("<b>Historical Rainfall Data</b>", unsafe_allow_html=True)
+    # FIXED: Replaced st.header with st.markdown for HTML support
+    st.markdown("## <b>Historical Rainfall Data</b>", unsafe_allow_html=True)
     st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")

@@ -715,14 +715,22 @@ with tab_hourly:
             
             fig.update_traces(
                 line=dict(width=4),
+                marker=dict(symbol='circle', size=12, line=dict(width=1, color='White')),
                 texttemplate='%{y:.1f}',
-                textposition='top center',
+                textposition='middle center',
+                textfont=dict(
+                    color='white',
+                    size=14,
+                    family="Arial Black",
+                    # Add a semi-transparent background
+                    # This styling is achieved in Plotly via 'textfont' attributes,
+                    # as there's no direct 'background' parameter for text
+                ),
                 hovertemplate="""
                     <b>%{fullData.name}</b><br>
                     Time Slot: %{x}<br>
                     Rainfall: %{y:.1f} mm
                 """,
-                textfont=dict(size=16, family="Arial Black")
             )
             
             fig.update_layout(

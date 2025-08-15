@@ -360,7 +360,7 @@ def show_24_hourly_dashboard(df, selected_date):
         categories=ordered_categories,
         ordered=True
     )
-    district_rainfall_avg_df['Rainfall_Range'] = district_rainfall_avg_df['Rainfall_Category'].map(category_ranges)
+    district_rainfall_avg_df['Rainfall_Range'] = district_rainfall_avg_avg_df['Rainfall_Category'].map(category_ranges)
 
 
     df_map_talukas = df.copy()
@@ -602,19 +602,6 @@ selected_date_str = selected_date.strftime("%Y-%m-%d")
 
 tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data (Coming Soon)"])
 
-with tab_daily:
-    st.header("Daily Rainfall Summary")
-
-    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_24hr = f"master24hrs_{selected_date_str}"
-
-    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
-
-    if not df_24hr.empty:
-        show_24_hourly_dashboard(df_24hr, selected_date)
-    else:
-        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
-
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
@@ -717,6 +704,19 @@ with tab_hourly:
 
     else:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
+
+with tab_daily:
+    st.header("Daily Rainfall Summary")
+
+    sheet_name_24hr = f"24HR_Rainfall_{selected_month}_{selected_year}"
+    tab_name_24hr = f"master24hrs_{selected_date_str}"
+
+    df_24hr = load_sheet_data(sheet_name_24hr, tab_name_24hr)
+
+    if not df_24hr.empty:
+        show_24_hourly_dashboard(df_24hr, selected_date)
+    else:
+        st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_historical:
     st.header("Historical Rainfall Data")

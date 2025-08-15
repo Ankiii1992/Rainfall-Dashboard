@@ -360,7 +360,7 @@ def show_24_hourly_dashboard(df, selected_date):
         categories=ordered_categories,
         ordered=True
     )
-    district_rainfall_avg_df['Rainfall_Range'] = district_rainfall_avg_avg_df['Rainfall_Category'].map(category_ranges)
+    district_rainfall_avg_df['Rainfall_Range'] = district_rainfall_avg_df['Rainfall_Category'].map(category_ranges)
 
 
     df_map_talukas = df.copy()

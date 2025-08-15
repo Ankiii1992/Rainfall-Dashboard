@@ -693,7 +693,6 @@ with tab_hourly:
             for taluka in selected_talukas:
                 taluka_df = plot_df[plot_df['Taluka'] == taluka].copy()
                 
-                # Assign colors based on rainfall category
                 taluka_df['category'] = taluka_df['Rainfall (mm)'].apply(classify_rainfall)
                 taluka_df['color'] = taluka_df['category'].map(color_map)
 
@@ -702,7 +701,7 @@ with tab_hourly:
                     y=taluka_df['Rainfall (mm)'],
                     name=taluka,
                     mode='lines',
-                    line=dict(width=4, color=taluka_df['color'].iloc[-1]), # Use the color of the latest data point for the line
+                    line=dict(width=4, color=taluka_df['color'].iloc[-1]),
                     hovertemplate="""
                         <b>%{fullData.name}</b><br>
                         Time Slot: %{x}<br>
@@ -715,11 +714,13 @@ with tab_hourly:
                     y=taluka_df['Rainfall (mm)'],
                     name=taluka,
                     mode='markers+text',
-                    text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{x:.1f}'),
+                    # --- START OF CHANGE ---
+                    text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{int(x)}'),
+                    # --- END OF CHANGE ---
                     textposition='middle center',
                     marker=dict(
                         size=30,
-                        color=taluka_df['color'], # Color circles based on each point's category
+                        color=taluka_df['color'],
                         line=dict(width=1.5, color='White')
                     ),
                     textfont=dict(

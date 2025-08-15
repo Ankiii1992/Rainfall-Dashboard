@@ -697,6 +697,11 @@ with tab_hourly:
     
         if selected_talukas:
             plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
+            max_y_value = plot_df['Rainfall (mm)'].max() if not plot_df['Rainfall (mm)'].dropna().empty else 1.0
+            
+            # Dynamic buffer for the y-axis, adds 10% to the max value
+            y_axis_range_max = max_y_value * 1.15 if max_y_value > 0 else 5.0
+            
             fig = px.line(
                 plot_df,
                 x="Time Slot Label",
@@ -723,9 +728,11 @@ with tab_hourly:
             fig.update_layout(
                 showlegend=True,
                 modebar_remove=['toImage'],
-                yaxis_rangemode='nonnegative',
-                # This is the fix to prevent cutoff
-                margin=dict(t=70) 
+                yaxis_rangemode='normal',
+                # Set a dynamic y-axis range based on the data
+                yaxis_range=[0, y_axis_range_max],
+                # Maintain the top margin
+                margin=dict(t=70)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:

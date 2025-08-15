@@ -12,13 +12,19 @@ import io
 # ---------------------------- CONFIG ----------------------------
 @st.cache_resource
 def get_gsheet_client():
-    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    return gspread.authorize(creds)
+    """Authenticates and returns a gspread client."""
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error(f"Authentication failed: {e}")
+        return None
 
 @st.cache_resource
 def load_geojson(path):
+    """Loads a GeoJSON file from the specified path."""
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             geojson_data = json.load(f)
@@ -26,7 +32,7 @@ def load_geojson(path):
     st.error(f"GeoJSON file not found at: {path}")
     return None
 
-# --- NEW: Enhanced CSS (with more robust fix) ---
+# --- Custom CSS for dashboard styling ---
 st.markdown("""
 <style>
     /* Hide Streamlit's default header and footer elements for a cleaner view */
@@ -42,7 +48,7 @@ st.markdown("""
         padding-top: 2rem;
     }
 
-    /* Other custom styles */
+    /* General styling */
     html, body, .main {
         background-color: #f3f6fa;
         font-family: 'Segoe UI', sans-serif;
@@ -64,7 +70,7 @@ st.markdown("""
         text-align: center;
         transition: 0.3s ease;
         border: 1px solid #c5e1e9;
-        height: 165px; /* Adjusted height for consistency */
+        height: 165px;
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -123,6 +129,7 @@ category_ranges = {
 }
 
 def classify_rainfall(rainfall):
+    """Classifies rainfall amount into predefined categories."""
     if pd.isna(rainfall) or rainfall == 0:
         return "No Rain"
     elif rainfall > 0 and rainfall <= 2.4:
@@ -151,25 +158,32 @@ ordered_categories = [
 # ---------------------------- UTILITY FUNCTIONS ----------------------------
 
 def generate_title_from_date(selected_date):
+    """Generates a formatted title string for the dashboard."""
     start_date = (selected_date - timedelta(days=1)).strftime("%d-%m-%Y")
     end_date = selected_date.strftime("%d-%m-%Y")
     return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
 
+@st.cache_data(ttl=3600)
 def load_sheet_data(sheet_name, tab_name):
+    """Loads data from a Google Sheet tab into a DataFrame."""
     try:
         client = get_gsheet_client()
-        sheet = client.open(sheet_name).worksheet(tab_name)
-        df = pd.DataFrame(sheet.get_all_records())
-        df.columns = df.columns.str.strip()
-        if 'TOTAL' in df.columns:
-            df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
-        else:
-            df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
-        return df
+        if client:
+            sheet = client.open(sheet_name).worksheet(tab_name)
+            df = pd.DataFrame(sheet.get_all_records())
+            df.columns = df.columns.str.strip()
+            if 'TOTAL' in df.columns:
+                df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka", "TOTAL": "Total_mm"}, inplace=True)
+            else:
+                df.rename(columns={"DISTRICT": "District", "TALUKA": "Taluka"}, inplace=True)
+            return df
+        return pd.DataFrame()
     except Exception as e:
+        st.error(f"Error loading data from sheet '{sheet_name}' tab '{tab_name}': {e}")
         return pd.DataFrame()
 
 def correct_taluka_names(df):
+    """Corrects known inconsistencies in taluka names."""
     taluka_name_mapping = {
         "Morbi": "Morvi", "Ahmedabad City": "Ahmadabad City", "Maliya Hatina": "Malia",
         "Shihor": "Sihor", "Dwarka": "Okhamandal", "Kalol(Gnr)": "Kalol",
@@ -177,7 +191,8 @@ def correct_taluka_names(df):
     df['Taluka'] = df['Taluka'].replace(taluka_name_mapping)
     return df
 
-def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo_feature_id_key="properties.SUB_DISTRICT", geo_location_col="Taluka"):
+def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_col):
+    """Generates a choropleth map with data categories."""
     geojson_data = load_geojson(geojson_path)
     if not geojson_data:
         return go.Figure()
@@ -195,7 +210,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
     elif 'District_Avg_Rain_Last_24_Hrs' in df_plot.columns:
         color_column = 'District_Avg_Rain_Last_24_Hrs'
     else:
-        st.warning("Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization. Map may not display categories correctly.")
+        st.warning("Map may not display categories correctly.")
         df_plot["Rainfall_Category"] = "No Rain"
         color_column = "Rainfall_Category"
 
@@ -253,6 +268,7 @@ def plot_choropleth(df, geojson_path, title="Gujarat Rainfall Distribution", geo
 
 
 def show_24_hourly_dashboard(df, selected_date):
+    """Generates and displays the daily summary dashboard elements."""
     df = correct_taluka_names(df)
     if "Rain_Last_24_Hrs" in df.columns:
         df.rename(columns={"Rain_Last_24_Hrs": "Total_mm"}, inplace=True)
@@ -291,11 +307,9 @@ def show_24_hourly_dashboard(df, selected_date):
     highest_district = highest_district_row['District']
     highest_district_avg = highest_district_row['Total_mm']
     
-    # New tile: "Talukas with Rainfall"
     TOTAL_TALUKAS_GUJARAT = 251
     num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
 
-    # --- NEW: Donut Chart and Metrics in two columns ---
     col_donut, col_metrics = st.columns([0.3, 0.7])
 
     with col_donut:
@@ -333,7 +347,6 @@ def show_24_hourly_dashboard(df, selected_date):
         st.plotly_chart(fig_donut, use_container_width=True)
 
     with col_metrics:
-        # Top Row of Tiles
         col_top1, col_top2 = st.columns(2)
         with col_top1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -344,7 +357,6 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown(f"<div class='metric-tile'><h4>State Avg. Rain (last 24 hrs)</h4><h2>{state_avg_24hr:.1f} mm</h2></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        # Bottom Row of Tiles
         col_bottom1, col_bottom2, col_bottom3 = st.columns(3)
         with col_bottom1:
             st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
@@ -387,17 +399,14 @@ def show_24_hourly_dashboard(df, selected_date):
     taluka_geojson = load_geojson("gujarat_taluka_clean.geojson")
     district_geojson = load_geojson("gujarat_district_clean.geojson")
 
-
     if not taluka_geojson or not district_geojson:
         st.error("Cannot display maps: One or both GeoJSON files not found or loaded correctly.")
         return
 
     tab_districts, tab_talukas = st.tabs(["Rainfall Distribution by Districts", "Rainfall Distribution by Talukas"])
 
-
     with tab_districts:
         map_col_dist, insights_col_dist = st.columns([0.5, 0.5])
-
         with map_col_dist:
             st.markdown("#### Gujarat Rainfall Map (by District)")
             with st.spinner("Loading district map..."):
@@ -412,7 +421,6 @@ def show_24_hourly_dashboard(df, selected_date):
 
         with insights_col_dist:
             st.markdown("#### Key Insights & Distributions (Districts)")
-
             category_counts_dist = district_rainfall_avg_df['Rainfall_Category'].value_counts().reset_index()
             category_counts_dist.columns = ['Category', 'Count']
             category_counts_dist['Category'] = pd.Categorical(
@@ -422,7 +430,6 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             category_counts_dist = category_counts_dist.sort_values('Category')
             category_counts_dist['Rainfall_Range'] = category_counts_dist['Category'].map(category_ranges)
-
             fig_category_dist_dist = px.bar(
                 category_counts_dist,
                 x='Category',
@@ -438,12 +445,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 }
             )
             fig_category_dist_dist.update_layout(
-                xaxis=dict(
-                    tickmode='array',
-                    tickvals=category_counts_dist['Category'],
-                    ticktext=[cat for cat in category_counts_dist['Category']],
-                    tickangle=0
-                ),
+                xaxis=dict(tickmode='array', tickvals=category_counts_dist['Category'], ticktext=[cat for cat in category_counts_dist['Category']], tickangle=0),
                 xaxis_title=None,
                 showlegend=False,
                 height=350,
@@ -451,10 +453,8 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             st.plotly_chart(fig_category_dist_dist, use_container_width=True, key="district_insights_bar_chart")
 
-
     with tab_talukas:
         map_col_tal, insights_col_tal = st.columns([0.5, 0.5])
-
         with map_col_tal:
             st.markdown("#### Gujarat Rainfall Map (by Taluka)")
             with st.spinner("Loading taluka map..."):
@@ -469,8 +469,6 @@ def show_24_hourly_dashboard(df, selected_date):
 
         with insights_col_tal:
             st.markdown("#### Key Insights & Distributions (Talukas)")
-            
-            # Moved pie chart here
             TOTAL_TALUKAS_GUJARAT = 251
             num_talukas_with_rain_today = df[df['Total_mm'] > 0].shape[0]
             talukas_without_rain = TOTAL_TALUKAS_GUJARAT - num_talukas_with_rain_today
@@ -502,7 +500,6 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             category_counts_tal = category_counts_tal.sort_values('Category')
             category_counts_tal['Rainfall_Range'] = category_counts_tal['Category'].map(category_ranges)
-
             fig_category_dist_tal = px.bar(
                 category_counts_tal,
                 x='Category',
@@ -518,12 +515,7 @@ def show_24_hourly_dashboard(df, selected_date):
                 }
             )
             fig_category_dist_tal.update_layout(
-                xaxis=dict(
-                    tickmode='array',
-                    tickvals=category_counts_tal['Category'],
-                    ticktext=[cat for cat in category_counts_tal['Category']],
-                    tickangle=0
-                ),
+                xaxis=dict(tickmode='array', tickvals=category_counts_tal['Category'], ticktext=[cat for cat in category_counts_tal['Category']], tickangle=0),
                 xaxis_title=None,
                 showlegend=False,
                 height=350,
@@ -565,9 +557,7 @@ def show_24_hourly_dashboard(df, selected_date):
 # ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
 
-# Use columns for the main title and the developer credit
 col1, col2 = st.columns([0.7, 0.3])
-
 with col1:
     st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 with col2:
@@ -579,7 +569,6 @@ if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.today().date()
 
 col_date_picker, col_prev_btn, col_today_btn, col_next_btn = st.columns([0.2, 0.1, 0.1, 0.1])
-
 with col_date_picker:
     selected_date_from_picker = st.date_input(
         "Choose Date",
@@ -591,7 +580,6 @@ with col_date_picker:
         st.rerun()
 
 selected_date = st.session_state.selected_date
-
 with col_prev_btn:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("⬅️ Previous Day", key="prev_day_btn"):
@@ -698,49 +686,55 @@ with tab_hourly:
         if selected_talukas:
             plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
             max_y_value = plot_df['Rainfall (mm)'].max() if not plot_df['Rainfall (mm)'].dropna().empty else 1.0
-            
-            # Dynamic buffer for the y-axis, adds 10% to the max value
             y_axis_range_max = max_y_value * 1.15 if max_y_value > 0 else 5.0
             
-            fig = px.line(
-                plot_df,
-                x="Time Slot Label",
-                y="Rainfall (mm)",
-                color="Taluka",
-                markers=True,
-                text="Rainfall (mm)",
-                title="Rainfall Trend Over Time for Selected Talukas",
-                labels={"Rainfall (mm)": "Rainfall (mm)"},
-            )
+            fig = go.Figure()
+            colors = px.colors.qualitative.Plotly
             
-            fig.update_traces(
-                line=dict(width=4),
-                marker=dict(symbol='circle', size=12, line=dict(width=1, color='White')),
-                texttemplate='%{y:.1f}',
-                textposition='middle center',
-                textfont=dict(
-                    color='white',
-                    size=14,
-                    family="Arial Black",
-                    # Add a semi-transparent background
-                    # This styling is achieved in Plotly via 'textfont' attributes,
-                    # as there's no direct 'background' parameter for text
-                ),
-                hovertemplate="""
-                    <b>%{fullData.name}</b><br>
-                    Time Slot: %{x}<br>
-                    Rainfall: %{y:.1f} mm
-                """,
-            )
+            for i, taluka in enumerate(selected_talukas):
+                taluka_df = plot_df[plot_df['Taluka'] == taluka]
+                
+                fig.add_trace(go.Scatter(
+                    x=taluka_df['Time Slot Label'],
+                    y=taluka_df['Rainfall (mm)'],
+                    name=taluka,
+                    mode='lines+markers+text',
+                    text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{x:.1f}'),
+                    textposition='middle center',
+                    line=dict(width=4, color=colors[i % len(colors)]),
+                    marker=dict(
+                        size=30,
+                        color=colors[i % len(colors)],
+                        line=dict(width=1.5, color='White')
+                    ),
+                    textfont=dict(
+                        color='white',
+                        size=14,
+                        family="Arial Black"
+                    ),
+                    hovertemplate="""
+                        <b>%{fullData.name}</b><br>
+                        Time Slot: %{x}<br>
+                        Rainfall: %{y:.1f} mm
+                    """
+                ))
             
             fig.update_layout(
+                title='Rainfall Trend Over Time for Selected Talukas',
+                xaxis_title='Time Slot',
+                yaxis_title='Rainfall (mm)',
                 showlegend=True,
                 modebar_remove=['toImage'],
                 yaxis_rangemode='normal',
-                # Set a dynamic y-axis range based on the data
                 yaxis_range=[0, y_axis_range_max],
-                # Maintain the top margin
-                margin=dict(t=70)
+                margin=dict(t=70),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                )
             )
             st.plotly_chart(fig, use_container_width=True)
         else:

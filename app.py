@@ -267,7 +267,6 @@ def show_24_hourly_dashboard(df, selected_date):
 
     title = generate_title_from_date(selected_date)
     st.subheader(title)
-    st.markdown("---")
 
 
     state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
@@ -346,8 +345,6 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown(f"<div class='metric-tile'><h4>Talukas with Rainfall Today</h4><h2>{num_talukas_with_rain_today}</h2><p>({TOTAL_TALUKAS_GUJARAT} Total Talukas)</p></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
     
-    st.markdown("---")
-
     st.markdown("### 🗺️ Rainfall Distribution Overview")
 
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
@@ -520,7 +517,6 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart")
 
-    st.markdown("---")
     st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
     df_top_10 = df.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
 
@@ -554,9 +550,15 @@ def show_24_hourly_dashboard(df, selected_date):
 
 # ---------------------------- UI ----------------------------
 st.set_page_config(layout="wide")
-st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
 
-st.markdown("---")
+# Use columns for the main title and the developer credit
+col1, col2 = st.columns([0.7, 0.3])
+
+with col1:
+    st.markdown("<div class='title-text'>🌧️ Gujarat Rainfall Dashboard</div>", unsafe_allow_html=True)
+with col2:
+    st.markdown("<div style='text-align: right; padding-top: 1rem; font-size: 0.95rem;'>Developed By Ankit Patel (Gujarat Weatheman)</div>", unsafe_allow_html=True)
+
 st.subheader("🗓️ Select Date for Rainfall Data")
 
 if 'selected_date' not in st.session_state:
@@ -594,7 +596,6 @@ with col_next_btn:
         st.session_state.selected_date = selected_date + timedelta(days=1)
         st.rerun()
 
-st.markdown("---")
 
 selected_year = selected_date.strftime("%Y")
 selected_month = selected_date.strftime("%B")

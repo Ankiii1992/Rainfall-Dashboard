@@ -11,6 +11,8 @@ import numpy as np
 
 # ---------------------------- CONFIG ----------------------------
 
+st.set_page_config(layout="wide", page_title="Rainfall Dashboard")
+
 @st.cache_resource
 def get_gsheet_client():
     """Establishes and caches a secure connection to Google Sheets."""
@@ -62,14 +64,14 @@ st.markdown("""
         text-align: center;
         transition: 0.3s ease;
         border: 1px solid #c5e1e9;
-        height: 165px; /* Adjusted height for consistency */
+        height: 165px;
         display: flex;
         flex-direction: column;
         justify-content: center;
     }
     .metric-tile:hover {
         transform: translateY(-4px);
-        box_shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
     }
     .metric-tile h4 {
         color: #01579b;
@@ -120,10 +122,6 @@ category_ranges = {
     "Exceptional": "> 350 mm"
 }
 
-# This function is no longer used due to the vectorized numpy approach
-# def classify_rainfall(rainfall):
-#     ... (previous logic) ...
-
 ordered_categories = [
     "No Rain", "Very Light", "Light", "Moderate", "Rather Heavy",
     "Heavy", "Very Heavy", "Extremely Heavy", "Exceptional"
@@ -137,7 +135,7 @@ def generate_title_from_date(selected_date):
     end_date = selected_date.strftime("%d-%m-%Y")
     return f"24 Hours Rainfall Summary ({start_date} 06:00 AM to {end_date} 06:00 AM)"
 
-@st.cache_data(ttl=3600)  # Cache data for 1 hour to speed up loading
+@st.cache_data(ttl=3600)
 def load_sheet_data(sheet_name, tab_name):
     """Loads and caches data from a specific tab of a Google Sheet."""
     try:
@@ -171,45 +169,44 @@ def correct_taluka_names(df):
     return df
 
 # --- MODIFIED: Optimized plot_choropleth function with px.choropleth_mapbox ---
-def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_col):
+def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_col, color_map, ordered_categories):
     """
     Generates a choropleth map using Plotly Express, leveraging the cached GeoJSON.
-    Uses numpy.select for fast rainfall classification.
+    Uses numpy.select for fast rainfall classification and a more efficient data join.
     """
     geojson_data = load_geojson(geojson_path, geo_feature_id_key.split('.')[-1])
     if not geojson_data:
+        st.error("Failed to load GeoJSON data.")
         return go.Figure()
 
     df_plot = df.copy()
-    
-    if geo_location_col == "Taluka":
-        df_plot["Taluka"] = df_plot["Taluka"].astype(str).str.strip().str.lower()
-    elif geo_location_col == "District":
-        df_plot["District"] = df_plot["District"].astype(str).str.strip().str.lower()
 
+    # Normalize the location column in the DataFrame for joining
+    df_plot[geo_location_col] = df_plot[geo_location_col].astype(str).str.strip().str.lower()
+    
     color_column = None
     if 'Total_mm' in df_plot.columns:
         color_column = 'Total_mm'
     elif 'District_Avg_Rain_Last_24_Hrs' in df_plot.columns:
         color_column = 'District_Avg_Rain_Last_24_Hrs'
     else:
-        st.warning("Neither 'Total_mm' nor 'District_Avg_Rain_Last_24_Hrs' found for map categorization. Map may not display categories correctly.")
+        st.warning("Cannot determine rainfall column. Map may not display categories correctly.")
         df_plot["Rainfall_Category"] = "No Rain"
         color_column = "Rainfall_Category"
 
     # --- OPTIMIZATION: Use numpy.select for vectorized classification ---
-    if color_column:
+    if color_column and color_column in df_plot.columns:
         df_plot[color_column] = pd.to_numeric(df_plot[color_column], errors='coerce')
         
         conditions = [
             (df_plot[color_column].isna()) | (df_plot[color_column] == 0),
             (df_plot[color_column] > 0) & (df_plot[color_column] <= 2.4),
-            (df_plot[color_column] <= 7.5),
-            (df_plot[color_column] <= 35.5),
-            (df_plot[color_column] <= 64.4),
-            (df_plot[color_column] <= 124.4),
-            (df_plot[color_column] <= 244.4),
-            (df_plot[color_column] <= 350),
+            (df_plot[color_column] > 2.4) & (df_plot[color_column] <= 7.5),
+            (df_plot[color_column] > 7.5) & (df_plot[color_column] <= 35.5),
+            (df_plot[color_column] > 35.5) & (df_plot[color_column] <= 64.4),
+            (df_plot[color_column] > 64.4) & (df_plot[color_column] <= 124.4),
+            (df_plot[color_column] > 124.4) & (df_plot[color_column] <= 244.4),
+            (df_plot[color_column] > 244.4) & (df_plot[color_column] <= 350),
             (df_plot[color_column] > 350)
         ]
         
@@ -222,17 +219,21 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             ordered=True
         )
     
+    # Check if the geojson_data is valid before plotting
+    if not geojson_data or not geojson_data.get("features"):
+        return go.Figure()
+        
     fig = px.choropleth_mapbox(
         df_plot,
         geojson=geojson_data,
         locations=geo_location_col,
         featureidkey=geo_feature_id_key,
-        color="Rainfall_Category", # The column with the categorical data
-        color_discrete_map=color_map, # The discrete color map
+        color="Rainfall_Category",
+        color_discrete_map=color_map,
         hover_name=geo_location_col,
         hover_data={
             "Rainfall_Category": True,
-            color_column: ":.1f" # Format the rainfall value
+            color_column: ":.1f" if color_column else False
         },
         mapbox_style="open-street-map",
         zoom=6,
@@ -431,7 +432,9 @@ def show_24_hourly_dashboard(df, selected_date):
                     "gujarat_district_clean.geojson",
                     title="Gujarat Daily Rainfall Distribution by District",
                     geo_feature_id_key="properties.district",
-                    geo_location_col="District"
+                    geo_location_col="District",
+                    color_map=color_map, 
+                    ordered_categories=ordered_categories
                 )
                 st.plotly_chart(fig_map_districts, use_container_width=True)
 
@@ -488,7 +491,9 @@ def show_24_hourly_dashboard(df, selected_date):
                     "gujarat_taluka_clean.geojson",
                     title="Gujarat Daily Rainfall Distribution by Taluka",
                     geo_feature_id_key="properties.SUB_DISTRICT",
-                    geo_location_col="Taluka"
+                    geo_location_col="Taluka",
+                    color_map=color_map, 
+                    ordered_categories=ordered_categories
                 )
                 st.plotly_chart(fig_map_talukas, use_container_width=True, key="taluka_map_chart")
 
@@ -647,7 +652,7 @@ tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary
 with tab_hourly:
     st.header("Hourly Rainfall Trends (2-Hourly)")
     sheet_name_2hr = f"2HR_Rainfall_{selected_month}_{selected_year}"
-    tab_name_2hr = f"2hrs_master_{selected_date_str}"
+    tab_name_2hr = f"master24hrs_{selected_date_str}" # Assumed tab name based on your data structure
 
     df_2hr = load_sheet_data(sheet_name_2hr, tab_name_2hr)
 

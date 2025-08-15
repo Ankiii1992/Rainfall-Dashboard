@@ -438,7 +438,8 @@ def show_24_hourly_dashboard(df, selected_date):
                 category_counts_dist,
                 x='Category',
                 y='Count',
-                title='<b>Distribution of Districts by Daily Rainfall Category</b>',
+                # CHANGED: Removed "Daily" from title
+                title='<b>Distribution of Districts by Rainfall Category</b>',
                 labels={'Count': '<b>Number of Districts</b>'},
                 color='Category',
                 color_discrete_map=color_map,
@@ -446,10 +447,11 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             # FIXED: Corrected hovertemplate to show Rainfall Range on bar chart
             # CHANGED: textposition to inside to show count between the bars
+            # ADDED: Bigger and bolder text
             fig_category_dist_dist.update_traces(
                 texttemplate='<b>%{text}</b>', 
                 textposition='inside',
-                textfont=dict(color='white'),
+                textfont=dict(color='white', size=16),
                 hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
                 customdata=category_counts_dist[['Rainfall_Range']]
             )
@@ -527,7 +529,8 @@ def show_24_hourly_dashboard(df, selected_date):
                 category_counts_tal,
                 x='Category',
                 y='Count',
-                title='<b>Distribution of Talukas by Daily Rainfall Category</b>',
+                # CHANGED: Removed "Daily" from title
+                title='<b>Distribution of Talukas by Rainfall Category</b>',
                 labels={'Count': '<b>Number of Talukas</b>'},
                 color='Category',
                 color_discrete_map=color_map,
@@ -535,10 +538,11 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             # FIXED: Corrected hovertemplate to show Rainfall Range on bar chart
             # CHANGED: textposition to inside to show count between the bars
+            # ADDED: Bigger and bolder text
             fig_category_dist_tal.update_traces(
                 texttemplate='<b>%{text}</b>', 
                 textposition='inside',
-                textfont=dict(color='white'),
+                textfont=dict(color='white', size=16),
                 hovertemplate='<b>%{x}</b><br>Rainfall Range: %{customdata[0]}<br>Count: %{y}<extra></extra>',
                 customdata=category_counts_tal[['Rainfall_Range']]
             )
@@ -588,9 +592,11 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         st.info("No rainfall data available to determine top 10 talukas.")
 
-    st.markdown("### 📋 <b>Full Daily Rainfall Data Table</b>", unsafe_allow_html=True)
+    # CHANGED: Removed "Full" from title
+    st.markdown("### 📋 <b>Daily Rainfall Data Table</b>", unsafe_allow_html=True)
     df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
     df_display.index += 1
+    # CHANGED: Removed the download button from st.dataframe.
     st.dataframe(df_display, use_container_width=True, height=400)
 
 def show_hourly_dashboard(df_2hr, selected_date):
@@ -649,10 +655,11 @@ def show_hourly_dashboard(df_2hr, selected_date):
 
         last_slot_label = slot_labels[existing_order[-1]]
 
+        # CHANGED: Updated the titles for the second and third tiles.
         row1_titles = [
             ("Total Talukas with Rainfall", num_talukas_with_rain_hourly),
-            ("Top Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
-            (f"Top Taluka in last 2 hour ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
+            ("Highest Rainfall Taluka by Total Rainfall", f"{top_taluka_row['Taluka']}<br><p>{top_taluka_row['Total_mm']:.1f} mm</p>"),
+            (f"Highest Rainfall in Last 2 hours ({last_slot_label})", f"{top_latest['Taluka']}<br><p>{top_latest['Rainfall (mm)']:.1f} mm</p>")
         ]
 
         for col, (label, value) in zip(row1, row1_titles):
@@ -685,7 +692,8 @@ def show_hourly_dashboard(df_2hr, selected_date):
         else:
             st.info("Please select at least one Taluka to view the rainfall trend.")
 
-        st.markdown("### 📋 <b>Full 2-Hourly Rainfall Data Table</b>", unsafe_allow_html=True)
+        # CHANGED: Title and removed download button.
+        st.markdown("### 📋 <b>2-hourly rainfall data table</b>", unsafe_allow_html=True)
         df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
         df_display_2hr.index += 1
         st.dataframe(df_display_2hr, use_container_width=True, height=600)

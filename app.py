@@ -675,30 +675,53 @@ with tab_hourly:
                 st.markdown("<div class='metric-container'>", unsafe_allow_html=True)
                 st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("### 📈 Rainfall Trend by 2-hourly Time Interval")
 
-        st.markdown("### 📈 Rainfall Trend by 2 hourly Time Interval")
-        selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
+        view_mode = st.radio("Select Chart View", ["Line Chart", "Heatmap"], key="hourly_chart_view")
 
-        if selected_talukas:
-            plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
-            fig = px.line(
-                plot_df,
-                x="Time Slot Label",
-                y="Rainfall (mm)",
-                color="Taluka",
-                markers=True,
-                text="Rainfall (mm)",
-                title="Rainfall Trend Over Time for Selected Talukas",
-                labels={"Rainfall (mm)": "Rainfall (mm)"}
+        if view_mode == "Line Chart":
+            selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
+        
+            if selected_talukas:
+                plot_df = df_long[df_long['Taluka'].isin(selected_talukas)]
+                fig = px.line(
+                    plot_df,
+                    x="Time Slot Label",
+                    y="Rainfall (mm)",
+                    color="Taluka",
+                    markers=True,
+                    text="Rainfall (mm)",
+                    title="Rainfall Trend Over Time for Selected Talukas",
+                    labels={"Rainfall (mm)": "Rainfall (mm)"}
+                )
+                fig.update_traces(textposition="top center")
+                fig.update_layout(showlegend=True)
+                fig.update_layout(modebar_remove=['toImage'])
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Please select at least one Taluka to view the rainfall trend.")
+
+        elif view_mode == "Heatmap":
+            heatmap_df = df_long.pivot_table(index='Taluka', columns='Time Slot Label', values='Rainfall (mm)', aggfunc='sum')
+            heatmap_df = heatmap_df.reindex(columns=[slot_labels[s] for s in existing_order], fill_value=0)
+            
+            fig = px.imshow(
+                heatmap_df,
+                x=heatmap_df.columns,
+                y=heatmap_df.index,
+                color_continuous_scale=px.colors.sequential.Bluyl,
+                aspect="auto",
+                title="Rainfall Heatmap by Taluka and Time Slot"
             )
-            fig.update_traces(textposition="top center")
-            fig.update_layout(showlegend=True)
-            fig.update_layout(modebar_remove=['toImage'])
+            fig.update_layout(
+                xaxis_title="Time Slot",
+                yaxis_title="Taluka",
+                height=600
+            )
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Please select at least one Taluka to view the rainfall trend.")
 
-        st.markdown("### 📋2-Hourly Rainfall Data Table")
+        st.markdown("### 📋 2-Hourly Rainfall Data Table")
         df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
         df_display_2hr.index += 1
         st.dataframe(df_display_2hr, use_container_width=True, height=600)

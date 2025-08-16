@@ -271,7 +271,7 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
 
     # Add the watermark
     fig.add_annotation(
-        text="Gujarat Weatherman",
+        text="© Gujarat Weatherman",
         xref="paper",
         yref="paper",
         x=0,

@@ -274,15 +274,15 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
         text="Gujarat Weatherman",
         xref="paper",
         yref="paper",
-        x=1,
+        x=0,
         y=0,
         showarrow=False,
         font=dict(
             size=40,
-            color="rgba(128, 128, 128, 0.4)", # Semi-transparent gray
+            color="black", 
             family="Arial Black"
         ),
-        xanchor="right",
+        xanchor="left",
         yanchor="bottom"
     )
     

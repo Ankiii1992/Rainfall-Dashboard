@@ -279,7 +279,7 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
         showarrow=False,
         font=dict(
             size=40,
-            color="#d3d3d3",
+            color="#555555",
             family="Arial Black"
         ),
         xanchor="left",

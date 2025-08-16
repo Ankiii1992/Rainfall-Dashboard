@@ -179,13 +179,11 @@ def load_sheet_data(sheet_name, tab_name):
             return df
         return pd.DataFrame()
     except gspread.exceptions.WorksheetNotFound:
-        st.warning(f"⚠️ Data sheet for '{tab_name}' not found. Please check your sheet and tab names.")
         return pd.DataFrame()
     except gspread.exceptions.SpreadsheetNotFound:
-        st.error(f"Spreadsheet '{sheet_name}' not found. Please ensure the spreadsheet name is correct and it is shared with the service account.")
         return pd.DataFrame()
     except Exception as e:
-        st.error(f"Error loading data from sheet '{sheet_name}' tab '{tab_name}': {e}")
+        # This catches any other unexpected errors, keeping them private
         return pd.DataFrame()
 
 def correct_taluka_names(df):
@@ -270,6 +268,24 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             itemsizing='constant',
         )
     )
+
+    # Add the watermark
+    fig.add_annotation(
+        text="Gujarat Weatherman",
+        xref="paper",
+        yref="paper",
+        x=1,
+        y=0,
+        showarrow=False,
+        font=dict(
+            size=40,
+            color="rgba(128, 128, 128, 0.4)", # Semi-transparent gray
+            family="Arial Black"
+        ),
+        xanchor="right",
+        yanchor="bottom"
+    )
+    
     return fig
 
 
@@ -578,6 +594,9 @@ if 'daily_data' not in st.session_state:
     st.session_state.daily_data = pd.DataFrame()
 if 'hourly_data' not in st.session_state:
     st.session_state.hourly_data = pd.DataFrame()
+if 'selected_date_str' not in st.session_state:
+    st.session_state.selected_date_str = st.session_state.selected_date.strftime("%Y-%m-%d")
+
 
 # This block is now outside the data-loading buttons to be visible on every rerun
 selected_year = st.session_state.selected_date.strftime("%Y")
@@ -745,7 +764,7 @@ with tab_hourly:
                     y=taluka_df['Rainfall (mm)'],
                     name=taluka,
                     mode='markers+text',
-                    text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{int(x)}' if pd.notnull(x) and x.is_integer() else (f'{x:.1f}' if pd.notnull(x) else '')),
+                    text=taluka_df['Rainfall (mm)'].apply(lambda x: f'{int(x)}' if pd.notnull(x) and x == int(x) else (f'{x:.1f}' if pd.notnull(x) else '')),
                     textposition='middle center',
                     marker=dict(
                         size=30,

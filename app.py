@@ -179,11 +179,13 @@ def load_sheet_data(sheet_name, tab_name):
             return df
         return pd.DataFrame()
     except gspread.exceptions.WorksheetNotFound:
+        st.warning(f"⚠️ Data sheet for '{tab_name}' not found. Please check your sheet and tab names.")
         return pd.DataFrame()
     except gspread.exceptions.SpreadsheetNotFound:
+        st.error(f"Spreadsheet '{sheet_name}' not found. Please ensure the spreadsheet name is correct and it is shared with the service account.")
         return pd.DataFrame()
     except Exception as e:
-        # This catches any other unexpected errors, keeping them private
+        st.error(f"Error loading data from sheet '{sheet_name}' tab '{tab_name}': {e}")
         return pd.DataFrame()
 
 def correct_taluka_names(df):
@@ -318,7 +320,7 @@ def show_24_hourly_dashboard(df, selected_date):
     df['District'] = df['District'].astype(str).str.strip()
 
     title = generate_title_from_date(selected_date)
-    st.subheader(title)
+    st.markdown(f"## {title}")
     st.markdown("<hr>", unsafe_allow_html=True)
 
     state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
@@ -571,7 +573,7 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         st.info("No rainfall data available to determine top 10 talukas.")
 
-    st.subheader("📋 Daily Rainfall Data Table")
+    st.markdown("### 📋 Daily Rainfall Data Table")
     df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
@@ -586,7 +588,7 @@ with col1:
 with col2:
     st.markdown("<div style='text-align: right; padding-top: 1rem; font-size: 0.95rem;'>Developed By Ankit Patel (Gujarat Weatheman)</div>", unsafe_allow_html=True)
 
-st.subheader("🗓️ Select Date for Rainfall Data")
+st.markdown("## 🗓️ Select Date for Rainfall Data")
 
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.today().date()
@@ -594,9 +596,6 @@ if 'daily_data' not in st.session_state:
     st.session_state.daily_data = pd.DataFrame()
 if 'hourly_data' not in st.session_state:
     st.session_state.hourly_data = pd.DataFrame()
-if 'selected_date_str' not in st.session_state:
-    st.session_state.selected_date_str = st.session_state.selected_date.strftime("%Y-%m-%d")
-
 
 # This block is now outside the data-loading buttons to be visible on every rerun
 selected_year = st.session_state.selected_date.strftime("%Y")
@@ -653,7 +652,7 @@ if selected_date_from_picker != st.session_state.selected_date:
 tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data"])
 
 with tab_hourly:
-    st.header("Hourly Rainfall Trends (2-Hourly)")
+    st.markdown("## Hourly Rainfall Trends (2-Hourly)")
     # Load data only if it's not already in session state
     if st.session_state.hourly_data.empty:
         with st.spinner(f"Fetching hourly data for {selected_date_str}... This may take a moment."):
@@ -814,7 +813,7 @@ with tab_hourly:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
 with tab_daily:
-    st.header("Daily Rainfall Summary")
+    st.markdown("## Daily Rainfall Summary")
     # Load data only if it's not already in session state
     if st.session_state.daily_data.empty:
         with st.spinner(f"Fetching daily data for {selected_date_str}... This may take a moment."):
@@ -828,5 +827,5 @@ with tab_daily:
         st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_historical:
-    st.header("Historical Rainfall Data")
+    st.markdown("## Historical Rainfall Data")
     st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")

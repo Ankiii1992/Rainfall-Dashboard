@@ -59,6 +59,29 @@ st.markdown("""
         color: #1a237e;
         padding: 1rem 0 0.2rem 0;
     }
+    /* Updated custom CSS for headings to match Streamlit's native headings without the link */
+    .no-link-h1 {
+        font-size: 2rem; /* Matches Streamlit's h1 */
+        font-weight: 600;
+        color: rgba(49, 51, 63, 1);
+        padding-top: 1.5rem;
+        padding-bottom: 1rem;
+    }
+    .no-link-h2 {
+        font-size: 1.5rem; /* Matches Streamlit's h2 */
+        font-weight: 600;
+        color: rgba(49, 51, 63, 1);
+        padding-top: 1rem;
+        padding-bottom: 0.5rem;
+    }
+    .no-link-h3 {
+        font-size: 1.25rem; /* Matches Streamlit's h3 */
+        font-weight: 600;
+        color: rgba(49, 51, 63, 1);
+        padding-top: 0.5rem;
+        padding-bottom: 0.25rem;
+    }
+
     .metric-container {
         padding: 0.8rem;
     }
@@ -270,24 +293,6 @@ def plot_choropleth(df, geojson_path, title, geo_feature_id_key, geo_location_co
             itemsizing='constant',
         )
     )
-
-    # Add the watermark
-    fig.add_annotation(
-        text="© Gujarat Weatherman",
-        xref="paper",
-        yref="paper",
-        x=0,
-        y=0,
-        showarrow=False,
-        font=dict(
-            size=30,
-            color="#555555",
-            family="Arial Black"
-        ),
-        xanchor="left",
-        yanchor="bottom"
-    )
-    
     return fig
 
 
@@ -320,7 +325,7 @@ def show_24_hourly_dashboard(df, selected_date):
     df['District'] = df['District'].astype(str).str.strip()
 
     title = generate_title_from_date(selected_date)
-    st.markdown(f"## {title}")
+    st.markdown(f'<h2 class="no-link-h2">{title}</h2>', unsafe_allow_html=True)
     st.markdown("<hr>", unsafe_allow_html=True)
 
     state_total_seasonal_avg = df["Total_Rainfall"].mean() if not df["Total_Rainfall"].isnull().all() else 0.0
@@ -395,7 +400,7 @@ def show_24_hourly_dashboard(df, selected_date):
             st.markdown(f"<div class='metric-tile'><h4>Talukas with Rainfall Today</h4><h2>{num_talukas_with_rain_today}</h2><p>({TOTAL_TALUKAS_GUJARAT} Total Talukas)</p></div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
     
-    st.markdown("### 🗺️ Rainfall Distribution Overview")
+    st.markdown("### 🗺️ Rainfall Distribution Overview", unsafe_allow_html=True)
 
     district_rainfall_avg_df = df.groupby('District')['Total_mm'].mean().reset_index()
     district_rainfall_avg_df = district_rainfall_avg_df.rename(
@@ -547,7 +552,7 @@ def show_24_hourly_dashboard(df, selected_date):
             )
             st.plotly_chart(fig_category_dist_tal, use_container_width=True, key="taluka_insights_category_chart")
 
-    st.markdown("### 🏆 Top 10 Talukas by Total Rainfall")
+    st.markdown("### 🏆 Top 10 Talukas by Total Rainfall", unsafe_allow_html=True)
     df_top_10 = df.dropna(subset=['Total_mm']).sort_values(by='Total_mm', ascending=False).head(10)
 
     if not df_top_10.empty:
@@ -573,7 +578,7 @@ def show_24_hourly_dashboard(df, selected_date):
     else:
         st.info("No rainfall data available to determine top 10 talukas.")
 
-    st.markdown("### 📋 Daily Rainfall Data Table")
+    st.markdown("### 📋 Daily Rainfall Data Table", unsafe_allow_html=True)
     df_display = df.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
     df_display.index += 1
     st.dataframe(df_display, use_container_width=True, height=400)
@@ -588,7 +593,7 @@ with col1:
 with col2:
     st.markdown("<div style='text-align: right; padding-top: 1rem; font-size: 0.95rem;'>Developed By Ankit Patel (Gujarat Weatheman)</div>", unsafe_allow_html=True)
 
-st.markdown("## 🗓️ Select Date for Rainfall Data")
+st.markdown('<h2 class="no-link-h2">🗓️ Select Date for Rainfall Data</h2>', unsafe_allow_html=True)
 
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.today().date()
@@ -652,7 +657,7 @@ if selected_date_from_picker != st.session_state.selected_date:
 tab_hourly, tab_daily, tab_historical = st.tabs(["Hourly Trends", "Daily Summary", "Historical Data"])
 
 with tab_hourly:
-    st.markdown("## Hourly Rainfall Trends (2-Hourly)")
+    st.markdown('<h2 class="no-link-h2">Hourly Rainfall Trends (2-Hourly)</h2>', unsafe_allow_html=True)
     # Load data only if it's not already in session state
     if st.session_state.hourly_data.empty:
         with st.spinner(f"Fetching hourly data for {selected_date_str}... This may take a moment."):
@@ -728,7 +733,7 @@ with tab_hourly:
                 st.markdown(f"<div class='metric-tile'><h4>{label}</h4><h2>{value}</h2></div>", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
         
-        st.markdown("### 📈 Rainfall Trend by 2-hourly Time Interval")
+        st.markdown('<h3 class="no-link-h3">📈 Rainfall Trend by 2-hourly Time Interval</h3>', unsafe_allow_html=True)
         
         selected_talukas = st.multiselect("Select Taluka(s)", sorted(df_long['Taluka'].unique()), default=[top_taluka_row['Taluka']] if top_taluka_row['Taluka'] != 'N/A' else [])
     
@@ -804,7 +809,7 @@ with tab_hourly:
         else:
             st.info("Please select at least one Taluka to view the rainfall trend.")
 
-        st.markdown("### 📋 2-Hourly Rainfall Data Table")
+        st.markdown('<h3 class="no-link-h3">📋 2-Hourly Rainfall Data Table</h3>', unsafe_allow_html=True)
         df_display_2hr = df_2hr.sort_values(by="Total_mm", ascending=False).reset_index(drop=True)
         df_display_2hr.index += 1
         st.dataframe(df_display_2hr, use_container_width=True, height=600)
@@ -813,7 +818,7 @@ with tab_hourly:
         st.warning(f"⚠️ 2-Hourly data is not available for {selected_date_str}.")
 
 with tab_daily:
-    st.markdown("## Daily Rainfall Summary")
+    st.markdown('<h2 class="no-link-h2">Daily Rainfall Summary</h2>', unsafe_allow_html=True)
     # Load data only if it's not already in session state
     if st.session_state.daily_data.empty:
         with st.spinner(f"Fetching daily data for {selected_date_str}... This may take a moment."):
@@ -827,5 +832,5 @@ with tab_daily:
         st.warning(f"⚠️ Daily data is not available for {selected_date_str}.")
 
 with tab_historical:
-    st.markdown("## Historical Rainfall Data")
+    st.markdown('<h2 class="no-link-h2">Historical Rainfall Data</h2>', unsafe_allow_html=True)
     st.info("💡 **Coming Soon:** This section will feature monthly/seasonal data, year-on-year comparisons, and long-term trends.")
